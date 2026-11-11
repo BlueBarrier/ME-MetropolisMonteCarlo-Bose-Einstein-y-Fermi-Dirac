@@ -1,0 +1,9 @@
+# Python 3.14 (probado con CPython 3.14.6 en Windows 11)
+# Instalar con:  python -m pip install -r requirements.txt
+numpy==2.4.6
+scipy==1.17.1
+matplotlib==3.11.0
+numba==0.65.1
+llvmlite==0.47.0
+pillow==12.2.0
+pytest==9.2.0

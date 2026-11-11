@@ -1,0 +1,10 @@
+experimento,comparacion,puntos,chi2,gl,chi2_red,p,nota,desviacion_media,desviacion_max,error_media
+DeMarco y Jin 1999 (40K),"gas de Fermi ideal, N→∞",29,200.7105355,29,6.921052949,1.366385091e-27,sigma_y = 0.0072 (barra típica de la figura),,,
+DeMarco y Jin 1999 (40K),ideal con T/T_F reescalado por s,29,30.1586283,28,1.077093868,0.3556752788,s = 0.847 ± 0.009 (sistemático de T/T_F declarado: 20 %),,,
+simulación FD N=10,"gas de Fermi ideal, N→∞",9,,,,,"0.3 ≤ T/T_F ≤ 1.3, T_F = (6N)^(1/3), con punto cero",0.008579361732,0.01772103133,
+simulación FD N=20,"gas de Fermi ideal, N→∞",8,,,,,"0.3 ≤ T/T_F ≤ 1.3, T_F = (6N)^(1/3), con punto cero",0.007659551777,0.01410868778,
+simulación FD N=35,"gas de Fermi ideal, N→∞",6,,,,,"0.3 ≤ T/T_F ≤ 1.3, T_F = (6N)^(1/3), con punto cero",0.004723228883,0.008626190755,
+simulación FD N=56,"gas de Fermi ideal, N→∞",5,,,,,"0.3 ≤ T/T_F ≤ 1.3, T_F = (6N)^(1/3), con punto cero",0.003866245575,0.005815474703,
+Ensher et al. 1996 (87Rb),"gas de Bose ideal, N→∞, T > T_0",11,,,,,dispersión empírica sigma = 0.066 k_B T_0,-0.05983546578,,0.01992146407
+Ensher et al. 1996 (87Rb),"gas clásico 1.5 T/T_0, T > T_0",11,,,,,,-0.1569363636,,0.01992146407
+Ensher et al. 1996 (87Rb),"gas de Bose ideal, N→∞, T < 0.9 T_0",15,,,,,exceso atribuible a la energía de interacción del condensado,0.3116942735,,0.01705972262
