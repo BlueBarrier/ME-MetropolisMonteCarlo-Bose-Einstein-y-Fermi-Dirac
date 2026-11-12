@@ -27,7 +27,6 @@ from src.config import (
     BURN_FRACTION,
     N_SAMPLES,
     N_VALUES,
-    PRODUCTION_PROPOSAL,
     Q_TOL,
     T_GRID,
     make_seed,
@@ -61,8 +60,7 @@ def main(fast: bool = False) -> None:
         chains = {}
         for m_code, mode in enumerate(("ground", "excited")):
             seed = make_seed(10, s_code, m_code)
-            res = run_mcmc_chain(N, 1.0 / T, q, stat, n_steps, n_burn, interval, seed, mode,
-                                 PRODUCTION_PROPOSAL, burn_in_interval=burn_interval)
+            res = run_mcmc_chain(N, 1.0 / T, q, stat, n_steps, n_burn, interval, seed, mode, burn_in_interval=burn_interval)
             chains[mode] = res
             burn = res["burn_E_trace"] / N
             prod = res["E_trace"] / N
@@ -119,7 +117,7 @@ def verify_burn_in(raw_dir, fast: bool = False) -> list[dict]:
     para la estadística (n_burn = BURN_FRACTION · pasos, la misma de run_sweeps.py) basta.
 
     Se corren dos cadenas sólo durante n_burn pasos, una desde el estado base y otra desde
-    T = ∞, con el mismo q_max, núcleo y número de pasos que el barrido. El punto pasa si sus
+    T = ∞, con el mismo q_max y número de pasos que el barrido. El punto pasa si sus
     promedios móviles se cruzan antes de n_burn. Salida: data/raw/burn_check.csv.
     """
     print("\nVerificación de n_burn en todos los puntos del barrido")
@@ -134,7 +132,7 @@ def verify_burn_in(raw_dir, fast: bool = False) -> list[dict]:
                 traces = []
                 for m_code, mode in enumerate(("ground", "excited")):
                     res = run_mcmc_chain(N, 1.0 / T, q, stat, N_SAMPLES, n_burn, N_SAMPLES,
-                                         make_seed(70, s_code, N, iT, m_code), mode, PRODUCTION_PROPOSAL,
+                                         make_seed(70, s_code, N, iT, m_code), mode,
                                          burn_in_interval=interval)
                     traces.append(res["burn_E_trace"] / N)
                 cross = estimate_burn_in(traces[0], traces[1], window=25)

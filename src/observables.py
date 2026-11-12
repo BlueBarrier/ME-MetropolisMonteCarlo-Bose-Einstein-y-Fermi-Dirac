@@ -94,3 +94,47 @@ def occupation_residuals(obs: dict, reference_occupation: np.ndarray, min_err: f
     err = obs["occupation_err"]
     res = (obs["occupation"] - reference_occupation[: err.size]) / np.where(err > min_err, err, np.nan)
     return res
+
+
+def heat_capacity(E_trace: np.ndarray, T: float, N: int) -> tuple[float, float]:
+    """C/(N k_B) por fluctuaciones de la energía en el ensemble canónico:
+
+        C = (⟨E²⟩ − ⟨E⟩²) / (k_B T²).
+
+    El error se obtiene tratando (E − Ē)² como una serie más (con su τ_int).
+    """
+    E = np.asarray(E_trace, dtype=float)
+    dE2 = (E - E.mean()) ** 2
+    var, _, var_err = statistical_uncertainty(dE2, resolution=1.0)
+    var *= E.size / (E.size - 1)  # varianza insesgada
+    return float(var / (T**2 * N)), float(var_err / (T**2 * N))
+
+
+def fit_chemical_potential(levels: np.ndarray, occupation: np.ndarray, occupation_err: np.ndarray,
+                           T: float, statistics: str = "fermions") -> tuple[float, float]:
+    """μ efectivo: ajuste de Fermi–Dirac (o Bose–Einstein) a ⟨n(ε)⟩ simulado, por mínimos cuadrados
+    ponderados con σ de cada nivel. Devuelve (μ, σ_μ)."""
+    from scipy.optimize import least_squares
+    from scipy.special import expit
+
+    eps = np.asarray(levels, dtype=float)
+    n = np.asarray(occupation, dtype=float)
+    err = np.asarray(occupation_err, dtype=float)
+    err = np.where(err > 0, err, max(float(err[err > 0].min()) if np.any(err > 0) else 1e-6, 1e-9))
+    beta = 1.0 / T
+    sign = 1.0 if statistics == "fermions" else -1.0
+
+    def model(mu):
+        if statistics == "fermions":
+            return expit(-beta * (eps - mu))
+        return 1.0 / np.expm1(np.clip(beta * (eps - mu), 1e-12, None))
+
+    mu0 = float(eps[np.argmin(np.abs(n - 0.5))]) if statistics == "fermions" else -T
+    hi = None if sign > 0 else -1e-9
+    res = least_squares(lambda m: (model(m[0]) - n) / err, x0=[mu0 if hi is None else min(mu0, hi)],
+                        bounds=([-np.inf], [np.inf if hi is None else hi]))
+    J = res.jac
+    dof = max(eps.size - 1, 1)
+    chi2_red = float(np.sum(res.fun**2) / dof)
+    cov = np.linalg.pinv(J.T @ J) * max(chi2_red, 1.0)
+    return float(res.x[0]), float(np.sqrt(cov[0, 0]))

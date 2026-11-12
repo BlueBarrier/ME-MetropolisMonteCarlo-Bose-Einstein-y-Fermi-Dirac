@@ -2,14 +2,18 @@
 y al terminar abre una ventana para verlas una por una (cierre la ventana para salir).
 
 Figuras en fig/ (nombre interno para --only → archivo):
-  fig_validation              → 01_validacion_contra_resultados_exactos.png        (run_validation.py)
-  fig_equilibration           → 02_equilibracion_desde_dos_estados_iniciales.png   (run_equilibration.py)
+  fig_validation              → 01a_validacion_N1_energia_vs_formula_analitica.png,
+                                01b_validacion_N3_ocupaciones_vs_enumeracion.png   (run_validation.py)
+  fig_equilibration           → 02a_equilibracion_bosones_desde_dos_estados_iniciales.png,
+                                02b_equilibracion_fermiones_desde_dos_estados_iniciales.png (run_equilibration.py)
   fig_autocorrelation         → 03_autocorrelacion_de_la_energia.png               (run_equilibration.py)
   fig_qmax_convergence        → 04_convergencia_en_el_corte_energetico_qmax.png    (run_sweeps.py, parte A)
   fig_energy_vs_T             → 05_energia_por_particula_vs_temperatura.png        (run_sweeps.py, parte B)
   fig_condensate_fraction     → 06_fraccion_de_condensado_bosones_vs_T.png         (run_sweeps.py, parte B)
   fig_occupations             → 07_ocupaciones_bosones_vs_fermiones_N45.png        (run_sweeps.py, parte C)
-  fig_ensemble_comparison     → 08_energia_canonico_vs_gran_canonico_BE_FD.png     (run_sweeps.py, parte B)
+  fig_heat_capacity_bosons    → 08a_calor_especifico_bosones_transicion_lambda.png (run_sweeps.py, parte B)
+  fig_heat_capacity_fermions  → 08b_calor_especifico_fermiones.png                  (run_sweeps.py, parte B)
+  fig_chemical_potential_fermions → 08c_potencial_quimico_fermiones.png            (run_sweeps.py, parte B)
 Tablas en data/tablas/: tabla_validacion.tex, tabla_resultados.csv, tabla_resultados.tex
 
 Uso: python scripts/plot_results.py [--fast] [--only NOMBRE] [--no-show]
@@ -31,28 +35,34 @@ from src.viewer import show_gallery
 
 
 
+CURVES_VERSION = 2
+
+
 def exact_curves(raw_dir, n_values) -> dict:
-    """Curvas exactas densas en T (canónico y gran canónico). Se guardan en caché porque tardan ~1 min."""
+    """Curvas exactas densas en T: E/N, f_0 y C/N canónicos, y μ de Fermi–Dirac con ⟨N⟩ = N.
+    Se guardan en caché porque tardan unos minutos."""
     path = raw_dir / "exact_curves.npz"
     if path.exists():
         arrays, meta = load_raw(path)
-        if meta.get("n_values") == list(n_values):
+        if meta.get("n_values") == list(n_values) and meta.get("version") == CURVES_VERSION:
             return arrays
     print("Calculando curvas exactas (guardadas en data/raw/exact_curves.npz)...")
     out = {}
-    T_dense = np.concatenate([np.linspace(0.12, 1.0, 23), np.linspace(1.05, 5.2, 42)])
+    T_dense = np.concatenate([np.linspace(0.12, 1.0, 23), np.linspace(1.05, 5.2, 84), np.linspace(5.3, 10.5, 27)])
     for stat in ("bosons", "fermions"):
         for N in n_values:
-            E, f0, Eg, f0g = [], [], [], []
+            E, f0, C, mu = [], [], [], []
             for T in T_dense:
                 q = an.reference_cutoff(N, T, stat)
                 ex = an.exact_canonical(N, q, 1.0 / T, stat)
-                gc = an.grand_canonical_observables(N, q, 1.0 / T, stat)
                 E.append(ex["energy_per_particle"]); f0.append(ex["condensate_fraction"])
-                Eg.append(gc["energy_per_particle"]); f0g.append(gc["condensate_fraction"])
+                C.append(an.heat_capacity_canonical(N, q, T, stat))
+                mu.append(an.solve_chemical_potential(N, 1.0 / T, q, stat) if stat == "fermions" else np.nan)
             out.update({f"{stat}_N{N}_T": T_dense, f"{stat}_N{N}_E": np.array(E), f"{stat}_N{N}_f0": np.array(f0),
-                        f"{stat}_N{N}_E_gc": np.array(Eg), f"{stat}_N{N}_f0_gc": np.array(f0g)})
-    save_raw(path, out, {"n_values": list(n_values), "description": "curvas exactas, corte q_ref ~ 40 T"})
+                        f"{stat}_N{N}_C": np.array(C), f"{stat}_N{N}_mu": np.array(mu)})
+        print(f"  {stat} listo", flush=True)
+    save_raw(path, out, {"n_values": list(n_values), "version": CURVES_VERSION,
+                         "description": "curvas exactas, corte q_ref ~ 40 T"})
     return out
 
 
@@ -67,12 +77,12 @@ def _sig(x: float, err: float) -> str:
 
 def tables(val_rows, rows, fig_dir) -> None:
     fig_dir.mkdir(parents=True, exist_ok=True)
-    lines = [r"\begin{tabular}{llrrrlrr}", r"\hline",
-             r"Caso & Núcleo & $N$ & $T$ & $q_{max}$ & Observable & Simulación & $z$ \\", r"\hline"]
+    lines = [r"\begin{tabular}{llrrlrr}", r"\hline",
+             r"Caso & $N$ & $T$ & $q_{max}$ & Observable & Simulación & $z$ \\", r"\hline"]
     for r in val_rows:
         if not str(r["observable"]).startswith("<n(eps"):
-            obs = r["observable"].replace("<n_0>/N", r"$\langle n_0\rangle/N$").replace("E/N", "$E/N$")
-            lines.append(f"{r['caso'].split()[0]} & {r['nucleo']} & {r['N']} & {r['T']:g} & {r['q_max']} & {obs} & "
+            obs = {"E/N": "$E/N$", "f0": r"$\langle n_0\rangle/N$"}.get(r["observable"], r["observable"])
+            lines.append(f"{r['caso'].split()[0]} & {r['N']} & {r['T']:g} & {r['q_max']} & {obs} & "
                          f"${_sig(r['simulacion'], r['sigma'])}$ & {r['z']:.2f} \\\\")
     lines += [r"\hline", r"\end{tabular}"]
     (fig_dir / "tabla_validacion.tex").write_text("\n".join(lines), encoding="utf-8")
@@ -84,7 +94,8 @@ def tables(val_rows, rows, fig_dir) -> None:
             "q_max": r["q_max"], "semilla": r["semilla"],
             "E/N": r["E_N"], "sigma_E/N": r["E_N_err"], "E/N exacto": r["E_N_exacto"], "z_E": r["z_E"],
             "f0": r["f0"], "sigma_f0": r["f0_err"], "f0 exacto": r["f0_exacto"], "z_f0": r["z_f0"],
-            "E/N gran canonico": r["E_N_gc"], "f0 gran canonico": r["f0_gc"], "mu": r["mu_gc"],
+            "C/N": r["C_N"], "sigma_C/N": r["C_N_err"], "C/N exacto": r["C_N_exacto"], "z_C": r["z_C"],
+            "mu ajuste FD": r["mu_ajuste"], "sigma_mu": r["mu_ajuste_err"], "mu FD (N fijo)": r["mu_gc"],
             "error_%_E": 100 * abs(r["E_N"] - r["E_N_exacto"]) / r["E_N_exacto"],
         })
     write_table_csv(fig_dir / "tabla_resultados.csv", sel)
@@ -114,9 +125,9 @@ def main(fast: bool = False, only: str | None = None, show: bool = True) -> list
     else:
         val_rows = []
     if (raw_dir / "equilibration.npz").exists():
-        eq, _ = load_raw(raw_dir / "equilibration.npz")
+        eq, eq_meta = load_raw(raw_dir / "equilibration.npz")
         if want("fig_equilibration"):
-            made += pl.fig_equilibration(eq, fig_dir)
+            made += pl.fig_equilibration(eq, fig_dir, eq_meta)
         if want("fig_autocorrelation"):
             made += pl.fig_autocorrelation(eq, fig_dir)
     if (raw_dir / "qmax_convergence.npz").exists() and want("fig_qmax_convergence"):
@@ -129,8 +140,9 @@ def main(fast: bool = False, only: str | None = None, show: bool = True) -> list
             made += pl.fig_energy_vs_T(rows, curves, N_VALUES, fig_dir)
         if want("fig_condensate_fraction"):
             made += pl.fig_condensate_fraction(rows, curves, N_VALUES, fig_dir)
-        if want("fig_ensemble_comparison"):
-            made += pl.fig_ensemble_comparison(rows, curves, N_VALUES, fig_dir)
+        for name in ("fig_heat_capacity_bosons", "fig_heat_capacity_fermions", "fig_chemical_potential_fermions"):
+            if want(name) and "C_N" in rows[0]:
+                made += getattr(pl, name)(rows, curves, N_VALUES, fig_dir)
         if (raw_dir / "occupations.npz").exists() and want("fig_occupations"):
             occ, _ = load_raw(raw_dir / "occupations.npz")
             made += pl.fig_occupations(occ, fig_dir)

@@ -20,16 +20,19 @@ BASE_SEED = 20261112  # semilla base
 N_VALUES = (10, 20, 35, 56)
 
 # Malla común de temperaturas reducidas (unidades de ħω/k_B), igual para las dos estadísticas.
-T_GRID = (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0)
+# Puntos extra cerca de T_c (2.25–3.25) para resolver el pico de C_V, y T alta (6–10) para ver
+# el acercamiento al límite clásico C/Nk_B → 3 y el cambio de signo de μ en fermiones.
+T_GRID = (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5, 4.0, 5.0,
+          6.0, 8.0, 10.0)
 
-# Núcleos:
-VALIDATION_PROPOSAL = "state"
-PRODUCTION_PROPOSAL = "particle"
 
 N_SAMPLES = 20_000  # mediciones por corrida
 BURN_FRACTION = 0.10  # termalización = 10 % de los pasos de producción
 STEPS_DEFAULT = 60_000_000
 STEPS_SLOW = 240_000_000  # bosones cerca de T_c (dinámica lenta del condensado)
+SLOW_WINDOW = (0.3, 1.45)  # intervalo de T/T_c con dinámica lenta en bosones
+LARGE_N = 35  # con N ≥ LARGE_N y T en SLOW_WINDOW, τ_int crece mucho (hasta ~120 muestras con 2.4e8 pasos)
+LARGE_N_FACTOR = 4  # ... así que esas corridas se hacen 4 veces más largas (9.6e8 pasos)
 Q_TOL = 1e-4  # error de truncamiento máximo en E/N, en unidades de T
 FAST_FACTOR = 0.05  # modo --fast: fracción de los pasos (sólo para verificar que todo corre)
 
@@ -60,12 +63,14 @@ def reference_temperature(N: int, statistics: str) -> float:
 def steps_for(N: int, T: float, statistics: str, fast: bool = False) -> int:
     """Número de pasos de producción según el régimen.
 
-    Por debajo de T_c el intercambio de partículas con el condensado es lento,
-    así que esas corridas se hacen 4 veces más largas.
+    En bosones con T/T_c en SLOW_WINDOW el intercambio de partículas con el condensado es
+    lento, así que esas corridas usan STEPS_SLOW; con N ≥ LARGE_N se alargan otro factor
+    LARGE_N_FACTOR para tener ≳ 300 muestras independientes y margen de termalización.
     """
     steps = STEPS_DEFAULT
-    if statistics == "bosons" and 0.4 <= T / reference_temperature(N, statistics) <= 1.2:
-        steps = STEPS_SLOW
+    t = T / reference_temperature(N, statistics)
+    if statistics == "bosons" and SLOW_WINDOW[0] <= t <= SLOW_WINDOW[1]:
+        steps = STEPS_SLOW * (LARGE_N_FACTOR if N >= LARGE_N else 1)
     if fast:
         steps = int(steps * FAST_FACTOR)
     return max(steps - steps % N_SAMPLES, N_SAMPLES)

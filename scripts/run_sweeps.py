@@ -4,12 +4,12 @@ Parte A, convergencia en el corte q_max a N y T fijos: separa el error de
   truncamiento (exacto(q_max) − exacto(q→∞)) del error estadístico
   (simulación − exacto(q_max)).
 Parte B, barrido en T para N ∈ {10, 20, 35, 56} y las dos estadísticas, con el
-  q_max elegido para que el truncamiento sea < 10⁻⁴ T. Cada punto se compara con
-  (i) la solución canónica exacta, que es la validación, y
-  (ii) el ensemble gran canónico (Bose–Einstein o Fermi–Dirac con μ fijado por N),
-  que es la comparación entre ensembles.
+  q_max elegido para que el truncamiento sea < 10⁻⁴ T. Cada punto se compara con la
+  solución canónica exacta (E/N, f_0 y el calor específico C/N, este último medido por
+  fluctuaciones de la energía). En fermiones se ajusta además Fermi–Dirac a ⟨n(ε)⟩
+  simulado para obtener el potencial químico μ(T).
 Parte C, ocupación media por estado ⟨n(ε)⟩ con N = 45 a T = 0.5, 2 y 4 para las dos
-  estadísticas, junto con la solución canónica exacta y la gran canónica (BE/FD).
+  estadísticas, junto con la solución canónica exacta.
 
 Salidas: data/raw/qmax_convergence.npz, data/raw/sweep/<estadística>_N<N>_T<T>.npz,
          data/raw/sweep_summary.csv, data/raw/occupations.npz
@@ -28,7 +28,6 @@ from src.config import (
     BURN_FRACTION,
     N_SAMPLES,
     N_VALUES,
-    PRODUCTION_PROPOSAL,
     Q_TOL,
     T_GRID,
     make_seed,
@@ -38,7 +37,7 @@ from src.config import (
 )
 from src.datastore import load_raw, save_raw, write_table_csv
 from src.metropolis import run_mcmc_chain
-from src.observables import compute_observables
+from src.observables import compute_observables, fit_chemical_potential, heat_capacity
 from src.stats import discrepancy_in_sigmas
 
 STAT_CODE = {"bosons": 0, "fermions": 1}
@@ -48,7 +47,7 @@ QMAX_VALUES = (4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50)
 
 def run_point(N: int, T: float, q_max: int, stat: str, n_steps: int, seed: int) -> tuple[dict, dict]:
     res = run_mcmc_chain(N, 1.0 / T, q_max, stat, n_steps, int(BURN_FRACTION * n_steps),
-                         n_steps // N_SAMPLES, seed, "ground", PRODUCTION_PROPOSAL)
+                         n_steps // N_SAMPLES, seed, "ground")
     return res, compute_observables(res["E_trace"], res["level_trace"], N)
 
 
@@ -109,6 +108,13 @@ def temperature_sweep(raw_dir, fast: bool, resume: bool) -> None:
                 ex_inf = an.exact_canonical(N, q_ref, beta, stat)
                 gc = an.grand_canonical_observables(N, q, beta, stat)
                 m = res["metadata"]
+                C, C_err = heat_capacity(res["E_trace"], T, N)
+                C_ex = an.heat_capacity_canonical(N, q, T, stat)
+                if stat == "fermions":
+                    mu_fit, mu_fit_err = fit_chemical_potential(obs["levels"], obs["occupation"],
+                                                                obs["occupation_err"], T)
+                else:
+                    mu_fit, mu_fit_err = float("nan"), float("nan")
                 summary = {
                     "estadistica": stat, "N": N, "T": T, "T_ref": T_ref, "T_escalada": T / T_ref,
                     "q_max": q, "M": m["M"], "semilla": seed, "pasos": steps,
@@ -129,6 +135,9 @@ def temperature_sweep(raw_dir, fast: bool, resume: bool) -> None:
                                                     gc["energy_per_particle"]),
                     "z_f0_gc": discrepancy_in_sigmas(obs["condensate_fraction"], obs["condensate_fraction_err"],
                                                      gc["condensate_fraction"]),
+                    "C_N": C, "C_N_err": C_err, "C_N_exacto": C_ex,
+                    "z_C": discrepancy_in_sigmas(C, C_err, C_ex),
+                    "mu_ajuste": mu_fit, "mu_ajuste_err": mu_fit_err,
                     "segundos": m["elapsed_seconds"],
                 }
                 arrays = {
@@ -145,6 +154,7 @@ def temperature_sweep(raw_dir, fast: bool, resume: bool) -> None:
                 print(f"  {stat:8s} N={N:2d} T={T:4.2f} (T/Tref={T / T_ref:4.2f}) q={q:3d}"
                       f"  E/N={summary['E_N']:.4f}±{summary['E_N_err']:.4f} z={summary['z_E']:.2f}"
                       f"  f0={summary['f0']:.4f}±{summary['f0_err']:.4f} z={summary['z_f0']:.2f}"
+                  f"  C/N={C:.3f}±{C_err:.3f} (exacto {C_ex:.3f})"
                       f"  ({m['elapsed_seconds']:.1f}s, total {time.perf_counter() - t_start:.0f}s)", flush=True)
     write_table_csv(raw_dir / "sweep_summary.csv", rows)
     zE = np.array([r["z_E"] for r in rows])

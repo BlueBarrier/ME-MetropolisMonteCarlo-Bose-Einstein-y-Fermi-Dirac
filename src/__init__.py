@@ -3,7 +3,7 @@
 Paquete del proyecto final de Mecánica Estadística (UVG). Módulos:
 
 - ``model``       : catálogo de estados, Hamiltoniano, unidades e inicialización.
-- ``metropolis``  : núcleos de Markov Chain Monte Carlo (Metropolis y Metropolis–Hastings).
+- ``metropolis``  : algoritmo de Metropolis–Hastings (Markov Chain Monte Carlo).
 - ``analytics``   : soluciones exactas (N = 1, enumeración, función generatriz canónica,
                     ensemble gran canónico y límite termodinámico).
 - ``stats``       : equilibración, autocorrelación integrada y discrepancia z.

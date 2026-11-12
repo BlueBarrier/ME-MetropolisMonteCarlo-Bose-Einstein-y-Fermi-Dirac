@@ -5,8 +5,8 @@ Convenciones visuales (las mismas en todas las figuras):
   dentro de cada tono y además llevan un marcador distinto.
 - Simulación: marcadores con barras de error (1σ, corregidas por autocorrelación).
 - Solución canónica exacta: línea continua del color de la serie.
-- Ensemble gran canónico (BE/FD): línea discontinua. Límite termodinámico o
-  referencia clásica: línea punteada.
+- Límite termodinámico (N → ∞): línea discontinua negra. Referencia clásica: línea punteada.
+- Ocupaciones: histograma del número medio de ocupación por estado ⟨n(ε)⟩ = ⟨N(ε)⟩/g(ε), con eje lineal.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import MaxNLocator, ScalarFormatter
 
 from . import analytics as an
 
@@ -23,11 +24,9 @@ RAMP = {
     "bosons": ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"],
     "fermions": ["#f3a17c", "#eb6834", "#b8461a", "#7a2c0c"],
 }
-KERNEL_COLOR = {"state": "#6250d6", "particle": "#1baf7a"}
 MARKERS = ["o", "s", "^", "D", "v"]
 INK, INK2, MUTED, GRID, AXIS = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
 NAME = {"bosons": "Bosones (BE)", "fermions": "Fermiones (FD)"}
-KERNEL_NAME = {"state": "Metropolis simétrico", "particle": "Metropolis–Hastings"}
 
 # Escala global del tamaño de las figuras (con 0.62 una figura de tres paneles mide ~8 pulgadas).
 FIG_SCALE = 0.62
@@ -52,14 +51,18 @@ def apply_style() -> None:
 
 # Nombre interno de cada figura -> nombre del archivo PNG (numerado en el orden de lectura).
 FIGURE_FILES = {
-    "fig_validation": "01_validacion_contra_resultados_exactos",
-    "fig_equilibration": "02_equilibracion_desde_dos_estados_iniciales",
+    "fig_validation_n1": "01a_validacion_N1_energia_vs_formula_analitica",
+    "fig_validation_n3": "01b_validacion_N3_ocupaciones_vs_enumeracion",
+    "fig_equilibration_bosons": "02a_equilibracion_bosones_desde_dos_estados_iniciales",
+    "fig_equilibration_fermions": "02b_equilibracion_fermiones_desde_dos_estados_iniciales",
     "fig_autocorrelation": "03_autocorrelacion_de_la_energia",
     "fig_qmax_convergence": "04_convergencia_en_el_corte_energetico_qmax",
     "fig_energy_vs_T": "05_energia_por_particula_vs_temperatura",
     "fig_condensate_fraction": "06_fraccion_de_condensado_bosones_vs_T",
     "fig_occupations": "07_ocupaciones_bosones_vs_fermiones_N45",
-    "fig_ensemble_comparison": "08_energia_canonico_vs_gran_canonico_BE_FD",
+    "fig_heat_capacity_bosons": "08a_calor_especifico_bosones_transicion_lambda",
+    "fig_heat_capacity_fermions": "08b_calor_especifico_fermiones",
+    "fig_chemical_potential_fermions": "08c_potencial_quimico_fermiones",
 }
 
 
@@ -78,6 +81,27 @@ def _eb(ax, x, y, yerr, color, marker="o", label=None, filled=True, ms=4.5, zord
                        mec=color, ms=ms, elinewidth=1.0, capsize=2, label=label, zorder=zorder, lw=0)
 
 
+def _plain_axis(ax, integer=False):
+    """Eje y lineal sin notación científica ni desplazamiento."""
+    fmt = ScalarFormatter(useOffset=False)
+    fmt.set_scientific(False)
+    ax.yaxis.set_major_formatter(fmt)
+    if integer:
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+
+def _level_histogram(ax, eps, sim_pop, exact_pop, color, dark, sim_label="simulación",
+                     exact_label="canónico exacto"):
+    """Histograma por nivel ε: barras = simulación, escalones negros = exacto."""
+    ax.bar(eps, sim_pop, width=0.8, color=color, alpha=0.75, edgecolor=dark, lw=0.6, label=sim_label, zorder=2)
+    ax.step(np.append(eps, eps[-1] + 1) - 0.5, np.append(exact_pop, exact_pop[-1]), where="post",
+            color=INK, lw=1.1, label=exact_label, zorder=3)
+    ax.set_ylim(0, None)
+    ax.set_xlim(eps[0] - 0.6, eps[-1] + 0.6)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    _plain_axis(ax)
+
+
 def _rows(rows, stat, N=None):
     sel = [r for r in rows if r["estadistica"] == stat and (N is None or r["N"] == N)]
     return sorted(sel, key=lambda r: r["T"])
@@ -90,60 +114,48 @@ def _col(rows, key):
 # ---------------------------------------------------------------------------
 # Validación contra resultados exactos
 # ---------------------------------------------------------------------------
-def fig_validation(val: dict, val_rows: list[dict], out_dir: Path):
-    fig, axes = plt.subplots(1, 3, figsize=_fs(13, 3.9), gridspec_kw={"width_ratios": [1.1, 1.1, 1.0]})
-    ax = axes[0]
-    ax.plot(val["n1_curve_T"], val["n1_curve_E"], color=INK, lw=1.2, label=r"exacto $3/(e^{\beta}-1)$")
-    ax.plot(val["n1_curve_T"], 3 * val["n1_curve_T"], color=MUTED, ls=":", lw=1.2, label=r"clásico $3k_BT$")
-    for prop, mk, filled in (("state", "o", False), ("particle", "s", True)):
-        _eb(ax, val[f"n1_{prop}_T"], val[f"n1_{prop}_E"], val[f"n1_{prop}_err"], KERNEL_COLOR[prop],
-            marker=mk, filled=filled, label=KERNEL_NAME[prop])
+def fig_validation(val: dict, val_rows: list[dict], out_dir: Path) -> list[Path]:
+    """Validación en dos figuras separadas: N = 1 (energía) y N = 3 (ocupación media por estado)."""
+    return _fig_validation_n1(val, out_dir) + _fig_validation_n3(val, out_dir)
+
+
+def _fig_validation_n1(val: dict, out_dir: Path) -> list[Path]:
+    fig, ax = plt.subplots(figsize=(6.4, 4.4))
+    ax.plot(val["n1_curve_T"], val["n1_curve_E"], color=INK, lw=1.4, label=r"exacto  $3/(e^{\beta}-1)$")
+    ax.plot(val["n1_curve_T"], 3 * val["n1_curve_T"] - 1.5, color=MUTED, ls=":", lw=1.3,
+            label=r"límite clásico  $3k_BT - \frac{3}{2}\hbar\omega$")
+    _eb(ax, val["n1_T"], val["n1_E"], val["n1_err"], "#1baf7a", marker="s", ms=6,
+        label="simulación (Metropolis–Hastings)")
     ax.set(xlabel=r"$T$  [$\hbar\omega/k_B$]", ylabel=r"$\langle E\rangle$  [$\hbar\omega$]",
-           title="(a) N = 1, trampa infinita")
-    ax.legend(loc="upper left")
-
-    ax = axes[1]
-    eps = val["n3_levels"]
-    for k, stat in enumerate(("bosons", "fermions")):
-        ax.plot(eps, val[f"n3_{stat}_occ_exact"], color=COLOR[stat], lw=1.0, alpha=0.9)
-        _eb(ax, eps + (k - 0.5) * 0.12, val[f"n3_{stat}_occ"], val[f"n3_{stat}_occ_err"], COLOR[stat],
-            marker=MARKERS[k], label=f"{'BE' if stat == 'bosons' else 'FD'}: simulación")
-    ax.plot([], [], color=INK2, lw=1.0, label="enumeración exacta")
-    ax.set_yscale("log")
-    ax.set_ylim(2e-4, 2.0)
-    ax.set(xlabel=r"nivel $\varepsilon$  [$\hbar\omega$]", ylabel=r"$\langle n(\varepsilon)\rangle$ por estado",
-           title=r"(b) N = 3, $q_{max}$ = 6, T = 1")
-    ax.legend(loc="lower left")
-
-    ax = axes[2]
-    groups = [("V1 N=1 analitico", "N=1\nanalítico"), ("V2 N=3 enumeracion", "N=3\nenumeración"),
-              ("V3 nucleos N=10", "N=10\n2 núcleos")]
-    ax.axvspan(0, 2, color=GRID, alpha=0.6, lw=0, label="|z| < 2")
-    rng = np.random.default_rng(0)
-    for gi, (case, label) in enumerate(groups):
-        for r in (r for r in val_rows if r["caso"] == case and np.isfinite(r["z"])):
-            c = KERNEL_COLOR[r["nucleo"]] if case != "V2 N=3 enumeracion" else COLOR[r["estadistica"]]
-            ax.plot(r["z"], gi + rng.uniform(-0.18, 0.18), "o", ms=4, color=c, mfc=c, alpha=0.85)
-    ax.set_yticks(range(len(groups)), [g[1] for g in groups])
-    ax.set_ylim(-0.6, len(groups) - 0.4)
-    ax.set_xlim(0, max(3.2, max(r["z"] for r in val_rows if np.isfinite(r["z"])) + 0.3))
-    ax.set(xlabel=r"$z = |\bar A - A_{exacto}|/\sigma_{\bar A}$", title="(c) Discrepancias en σ")
-    ax.grid(axis="y", visible=False)
-    for prop in ("state", "particle"):
-        ax.plot([], [], "o", ms=4, color=KERNEL_COLOR[prop], label=KERNEL_NAME[prop])
-    for stat in ("bosons", "fermions"):
-        ax.plot([], [], "o", ms=4, color=COLOR[stat], label=f"N = 3, {'BE' if stat == 'bosons' else 'FD'}")
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=6.3)
+           title="Validación con N = 1: energía media frente a la fórmula analítica", xlim=(0, 5.3))
+    ax.legend(loc="upper left", fontsize=8)
     fig.tight_layout()
-    return save(fig, out_dir, "fig_validation")
+    return save(fig, out_dir, "fig_validation_n1")
+
+
+def _fig_validation_n3(val: dict, out_dir: Path) -> list[Path]:
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
+    eps = val["n3_levels"]
+    for ax, stat in zip(axes, ("bosons", "fermions")):
+        _level_histogram(ax, eps, val[f"n3_{stat}_occ"], val[f"n3_{stat}_occ_exact"], COLOR[stat],
+                         RAMP[stat][3], sim_label="simulación (Metropolis–Hastings)", exact_label="enumeración exacta")
+        ax.set(xlabel=r"nivel $\varepsilon$  [$\hbar\omega$]", ylabel=r"número medio de ocupación  $\langle n(\varepsilon)\rangle$",
+               title=f"{NAME[stat]}, N = 3, $q_{{max}}$ = 6, T = 1")
+        ax.legend(loc="upper right", fontsize=8)
+    fig.suptitle("Validación con N = 3: número medio de ocupación frente a la enumeración de todas las configuraciones",
+                 x=0.01, ha="left", fontsize=10)
+    fig.tight_layout()
+    return save(fig, out_dir, "fig_validation_n3")
 
 
 # ---------------------------------------------------------------------------
 # Equilibración y autocorrelación
 # ---------------------------------------------------------------------------
-def fig_equilibration(eq: dict, out_dir: Path):
-    fig, axes = plt.subplots(1, 2, figsize=_fs(11, 3.8))
-    for ax, stat in zip(axes, ("bosons", "fermions")):
+def fig_equilibration(eq: dict, out_dir: Path, params: dict | None = None) -> list[Path]:
+    """Equilibración en dos figuras separadas, una por estadística (02a bosones, 02b fermiones)."""
+    out = []
+    for stat in ("bosons", "fermions"):
+        fig, ax = plt.subplots(figsize=_fs(9.5, 5.0))
         ramp = RAMP[stat]
         for mode, color, label in (("ground", ramp[3], "inicio frío (estado base)"),
                                    ("excited", ramp[1], r"inicio caliente ($T=\infty$)")):
@@ -152,7 +164,11 @@ def fig_equilibration(eq: dict, out_dir: Path):
             t = np.concatenate([[1], burn_t, prod_t[::stride]])
             E = np.concatenate([[eq[f"{stat}_{mode}_E0"]], eq[f"{stat}_{mode}_burn_E"], eq[f"{stat}_{mode}_prod_E"][::stride]])
             ax.plot(t, E, color=color, lw=0.9, label=label)
-        ax.axhline(float(eq[f"{stat}_exact"]), color=INK, ls="--", lw=1.1, label="canónico exacto")
+        p = (params or {}).get(f"{stat}_params", {})
+        eq_label = "E/N de equilibrio (canónico exacto)"
+        if p:
+            eq_label += f", T = {p['T']:g}, N = {p['N']}"
+        ax.axhline(float(eq[f"{stat}_exact"]), color=INK, ls="--", lw=1.1, label=eq_label)
         nb = int(eq[f"{stat}_n_burn"])
         ax.axvline(nb, color=INK2, ls=":", lw=1.2)
         ax.text(nb * 1.1, ax.get_ylim()[1] * 0.97, r"$n_{burn}$", color=INK2, va="top")
@@ -161,22 +177,22 @@ def fig_equilibration(eq: dict, out_dir: Path):
             ax.axvline(cross, color=MUTED, ls="-.", lw=1.0, label=f"cruce de cadenas ({cross:.1e} pasos)")
         ax.set_xscale("log")
         ax.set(xlabel="pasos de Monte Carlo (propuestas)", ylabel=r"$E/N$  [$\hbar\omega$]",
-               title=f"({'a' if stat == 'bosons' else 'b'}) {NAME[stat]}, z entre cadenas = {float(eq[f'{stat}_z_chains']):.2f}")
-        ax.legend(loc="center right")
-    fig.tight_layout()
-    return save(fig, out_dir, "fig_equilibration")
+               title=NAME[stat])
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.27), ncol=2)
+        fig.tight_layout()
+        out += save(fig, out_dir, f"fig_equilibration_{stat}")
+    return out
 
 
 def fig_autocorrelation(eq: dict, out_dir: Path):
-    """C(t) de E/N en producción, con τ_int y la comparación entre el error ingenuo y el corregido."""
+    """C(t) de E/N en producción, con el tiempo de autocorrelación integrado τ_int de cada estadística."""
     fig, ax = plt.subplots(figsize=_fs(8.5, 4.2))
     for stat in ("bosons", "fermions"):
         acf, tau = eq[f"{stat}_acf"], float(eq[f"{stat}_tau"])
-        ratio = float(eq[f"{stat}_err_tau"]) / float(eq[f"{stat}_err_naive"])
         lag = np.arange(acf.size)
         cut = min(acf.size, int(10 * tau) + 5)
         ax.plot(lag[:cut], acf[:cut], color=COLOR[stat],
-                label=fr"{NAME[stat]}: $\tau_{{int}}$ = {tau:.1f}  (σ corregido = {ratio:.1f}× σ ingenuo)")
+                label=fr"{NAME[stat]}: $\tau_{{int}}$ = {tau:.1f} mediciones")
         ax.axvline(tau, color=COLOR[stat], ls=":", lw=1.0)
     ax.axhline(0, color=AXIS, lw=0.8)
     ax.set(xlabel="retardo t  [mediciones]", ylabel=r"$C(t)$ de $E/N$",
@@ -260,16 +276,15 @@ def fig_energy_vs_T(rows: list[dict], curves: dict, n_values, out_dir: Path):
 def fig_condensate_fraction(rows: list[dict], curves: dict, n_values, out_dir: Path):
     fig, ax = plt.subplots(figsize=_fs(10.5, 4.6))
     t = np.linspace(0, 1.6, 300)
-    ax.plot(t, np.clip(1 - t**3, 0, None), color=INK, ls="--", lw=1.2, label=r"$N\to\infty$: $1-(T/T_c)^3$")
+    ax.plot(t, np.clip(1 - t**3, 0, None), color=INK, ls="--", lw=1.4,
+            label=r"teoría: $\langle N_0\rangle/N = 1-(T/T_c)^3$")
     for k, N in enumerate(n_values):
         c = RAMP["bosons"][k]
         Tc = float(an.bec_critical_temperature(N))
         ax.plot(curves[f"bosons_N{N}_T"] / Tc, curves[f"bosons_N{N}_f0"], color=c, lw=1.0)
-        ax.plot(t, an.condensate_fraction_finite_size(t * Tc, N), color=c, ls=":", lw=1.1)
         sel = _rows(rows, "bosons", N)
         _eb(ax, _col(sel, "T") / Tc, _col(sel, "f0"), _col(sel, "f0_err"), c, marker=MARKERS[k], label=f"N = {N}")
     ax.plot([], [], color=INK2, lw=1.0, label="canónico exacto")
-    ax.plot([], [], color=INK2, ls=":", lw=1.1, label=r"$1-t^3-3C\,t^2N^{-1/3}$ (tamaño finito)")
     ax.set(xlabel=r"$T/T_c$,  $T_c = (N/\zeta(3))^{1/3}\,\hbar\omega/k_B$", ylabel=r"$f_0 = \langle n_0\rangle/N$",
            title="Fracción de condensado (bosones)", xlim=(0, 1.6), ylim=(-0.02, 1.02))
     ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5))
@@ -278,7 +293,7 @@ def fig_condensate_fraction(rows: list[dict], curves: dict, n_values, out_dir: P
 
 
 def fig_occupations(occ: dict, out_dir: Path):
-    """Ocupación media por estado: simulación (puntos pequeños, sin barras), canónico exacto y gran canónico.
+    """Histograma del número medio de ocupación por estado ⟨n(ε)⟩: simulación (barras) y canónico exacto.
 
     ``occ`` es el contenido de data/raw/occupations.npz (ver scripts/run_sweeps.py, parte C).
     """
@@ -291,56 +306,107 @@ def fig_occupations(occ: dict, out_dir: Path):
         for col, T in enumerate(temps):
             ax = axes[row, col]
             key = f"{stat}_T{T:.2f}"
-            eps, sim = occ[f"{key}_levels"], occ[f"{key}_sim"]
-            ex, gc = occ[f"{key}_exact"], occ[f"{key}_gc"]
-            keep = ex > 1e-4
+            eps, sim, ex = occ[f"{key}_levels"], occ[f"{key}_sim"], occ[f"{key}_exact"]
+            g = (eps + 1) * (eps + 2) / 2
+            keep = g * ex > 0.02  # niveles con al menos ~0.02 partículas en promedio
             xmax = int(eps[keep].max()) if keep.any() else int(eps.max())
             m = eps <= xmax
-            # Canónico (banda gruesa clara) y gran canónico (discontinua oscura): se distinguen aunque coincidan.
-            ax.plot(eps[m], ex[m], color=COLOR[stat], lw=3.2, alpha=0.35, solid_capstyle="round",
-                    label="canónico exacto", zorder=1)
-            ax.plot(eps[m], gc[m], color=INK, ls=(0, (4, 2)), lw=0.9, label=f"gran canónico ({tag})", zorder=2)
-            vis = m & (sim > 0)
-            ax.plot(eps[vis], sim[vis], ls="none", marker="D", ms=2.6, mfc=RAMP[stat][3], mec=RAMP[stat][3],
-                    label="simulación", zorder=3)
-            if stat == "bosons":
-                ax.set_yscale("log")
-            else:
-                ax.set_ylim(-0.03, 1.05)
+            _level_histogram(ax, eps[m], sim[m], ex[m], COLOR[stat], RAMP[stat][3])
+            if stat == "fermions":
+                ax.set_ylim(0, 1.08)
                 eF = an.fermi_energy(N)
-                ax.axvline(eF, color=MUTED, ls=":", lw=1.0)
-                ax.text(eF + 0.2, 1.0, r"$\varepsilon_F$", color=MUTED, va="top")
+                ax.axvline(eF + 0.5, color=MUTED, ls=":", lw=1.0)
+                ax.text(eF + 0.6, ax.get_ylim()[1] * 0.95, r"$\varepsilon_F$", color=MUTED, va="top")
             ref = r"T/T_c" if stat == "bosons" else r"T/T_F"
             ax.set_title(f"({'abcdef'[row * len(temps) + col]}) {tag}, T = {T:g}  (${ref}$ = {T / T_ref:.2f})")
             ax.set_xlabel(r"$\varepsilon$  [$\hbar\omega$]")
             if col == 0:
-                ax.set_ylabel(r"$\langle n(\varepsilon)\rangle$ por estado")
+                ax.set_ylabel(r"número medio de ocupación  $\langle n(\varepsilon)\rangle$")
             if col == len(temps) - 1:
                 ax.legend(loc="upper right")
-    fig.suptitle(f"Ocupación media por estado, N = {N}", x=0.01, ha="left", fontsize=9.5)
+    fig.suptitle(f"Número medio de ocupación por estado en cada nivel de energía, N = {N}", x=0.01, ha="left", fontsize=9.5)
     fig.tight_layout()
     return save(fig, out_dir, "fig_occupations")
 
 
-def fig_ensemble_comparison(rows: list[dict], curves: dict, n_values, out_dir: Path):
-    """Diferencia relativa de energía entre los ensembles canónico y gran canónico (BE y FD)."""
-    fig, axes = plt.subplots(1, 2, figsize=_fs(11.5, 4.0))
-    for ax, stat, letter in ((axes[0], "bosons", "a"), (axes[1], "fermions", "b")):
-        for k, N in enumerate(n_values):
-            c = RAMP[stat][k]
-            Tr = an.bec_critical_temperature(N) if stat == "bosons" else an.fermi_energy(N)
-            Tc_, E, Eg = curves[f"{stat}_N{N}_T"], curves[f"{stat}_N{N}_E"], curves[f"{stat}_N{N}_E_gc"]
-            ax.plot(Tc_ / Tr, (E - Eg) / Eg, color=c, lw=1.0)
-            sel = _rows(rows, stat, N)
-            Eg_s = _col(sel, "E_N_gc")
-            _eb(ax, _col(sel, "T") / Tr, (_col(sel, "E_N") - Eg_s) / Eg_s, _col(sel, "E_N_err") / Eg_s, c,
-                marker=MARKERS[k], label=f"N = {N}")
-        ax.axhline(0, color=AXIS, lw=0.8)
-        ax.set(xlabel=r"$T/T_c$" if stat == "bosons" else r"$T/T_F$", ylabel=r"$(E^{can}-E^{gc})/E^{gc}$",
-               title=f"({letter}) {NAME[stat]}: energía, canónico − gran canónico", xlim=(0, 1.6))
-        ax.legend(loc="upper right" if stat == "bosons" else "lower right")
+# ---------------------------------------------------------------------------
+# Calor específico (transición lambda) y potencial químico
+# ---------------------------------------------------------------------------
+def fig_heat_capacity_bosons(rows: list[dict], curves: dict, n_values, out_dir: Path):
+    """C/(N k_B) de los bosones frente a T/T_c: el pico que crece con N es la transición lambda."""
+    fig, ax = plt.subplots(figsize=_fs(10.5, 5.0))
+    t = np.concatenate([np.linspace(0.02, 1.0, 120), np.linspace(1.0005, 3.0, 160)])
+    C_tl = an.bose_heat_capacity_thermodynamic(t)
+    below = t <= 1.0
+    ax.plot(t[below], C_tl[below], color=INK, ls="--", lw=1.5, label=r"teoría $N\to\infty$")
+    ax.plot(t[~below], C_tl[~below], color=INK, ls="--", lw=1.5)
+    ax.plot([1, 1], [C_tl[~below][0], C_tl[below][-1]], color=INK, ls="--", lw=0.8)
+    for k, N in enumerate(n_values):
+        c = RAMP["bosons"][k]
+        Tc = float(an.bec_critical_temperature(N))
+        ax.plot(curves[f"bosons_N{N}_T"] / Tc, curves[f"bosons_N{N}_C"], color=c, lw=1.1)
+        sel = _rows(rows, "bosons", N)
+        _eb(ax, _col(sel, "T") / Tc, _col(sel, "C_N"), _col(sel, "C_N_err"), c, marker=MARKERS[k], label=f"N = {N}")
+    ax.axhline(3.0, color=MUTED, ls=":", lw=1.2, label=r"límite clásico $3k_B$")
+    ax.axvline(1.0, color=AXIS, lw=0.8)
+    ax.annotate(r"$\frac{12\zeta(4)}{\zeta(3)}\left(\frac{T}{T_c}\right)^3$", xy=(0.8, 12 * an.ZETA4 / an.ZETA3 * 0.512),
+                xytext=(0.32, 8.0), fontsize=9, color=INK2, arrowprops={"arrowstyle": "->", "color": INK2, "lw": 0.8})
+    ax.plot([], [], color=INK2, lw=1.1, label="canónico exacto (N finito)")
+    ax.set(xlabel=r"$T/T_c$,  $T_c = (N/\zeta(3))^{1/3}\,\hbar\omega/k_B$", ylabel=r"$C_V/(N k_B)$",
+           title="Calor específico de los bosones: transición lambda en la trampa armónica", xlim=(0, 3.0), ylim=(0, 11.5))
+    ax.legend(loc="upper right")
     fig.tight_layout()
-    return save(fig, out_dir, "fig_ensemble_comparison")
+    return save(fig, out_dir, "fig_heat_capacity_bosons")
+
+
+def fig_heat_capacity_fermions(rows: list[dict], curves: dict, n_values, out_dir: Path):
+    """C/(N k_B) de los fermiones frente a T/E_F: lineal a T baja (Sommerfeld) y → 3 a T alta."""
+    fig, ax = plt.subplots(figsize=_fs(10.5, 5.0))
+    t = np.linspace(0.01, 2.6, 220)
+    ax.plot(t, an.fermi_heat_capacity_thermodynamic(t), color=INK, ls="--", lw=1.5, label=r"teoría $N\to\infty$")
+    ts = t[t < 0.3]
+    ax.plot(ts, np.pi**2 * ts, color=INK2, ls="-.", lw=1.1, label=r"Sommerfeld: $\pi^2\,T/E_F$")
+    for k, N in enumerate(n_values):
+        c = RAMP["fermions"][k]
+        EF = float(an.fermi_energy_semiclassical(N))
+        ax.plot(curves[f"fermions_N{N}_T"] / EF, curves[f"fermions_N{N}_C"], color=c, lw=1.1)
+        sel = _rows(rows, "fermions", N)
+        _eb(ax, _col(sel, "T") / EF, _col(sel, "C_N"), _col(sel, "C_N_err"), c, marker=MARKERS[k], label=f"N = {N}")
+    ax.axhline(3.0, color=MUTED, ls=":", lw=1.2, label=r"límite clásico $3k_B$")
+    ax.plot([], [], color=INK2, lw=1.1, label="canónico exacto (N finito)")
+    ax.set(xlabel=r"$T/E_F$,  $E_F = (6N)^{1/3}\,\hbar\omega$", ylabel=r"$C_V/(N k_B)$",
+           title="Calor específico de los fermiones: crecimiento lineal y límite clásico", xlim=(0, 2.6), ylim=(0, 3.4))
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    return save(fig, out_dir, "fig_heat_capacity_fermions")
+
+
+def fig_chemical_potential_fermions(rows: list[dict], curves: dict, n_values, out_dir: Path):
+    """μ(T) de los fermiones: parte de E_F, baja como 1 − (π²/3)(T/E_F)² y se vuelve negativo (régimen clásico).
+
+    μ se mide desde el fondo de la trampa (se suma la energía de punto cero 3ħω/2) para comparar
+    con el límite continuo; los puntos son el μ de un ajuste de Fermi–Dirac a ⟨n(ε)⟩ simulado.
+    """
+    fig, ax = plt.subplots(figsize=_fs(10.5, 5.0))
+    t = np.linspace(0.01, 2.6, 220)
+    ax.plot(t, an.fermi_chemical_potential_thermodynamic(t), color=INK, ls="--", lw=1.5, label=r"teoría $N\to\infty$")
+    ts = t[t < 0.45]
+    ax.plot(ts, 1 - np.pi**2 / 3 * ts**2, color=INK2, ls="-.", lw=1.1, label=r"Sommerfeld: $1-\frac{\pi^2}{3}(T/E_F)^2$")
+    for k, N in enumerate(n_values):
+        c = RAMP["fermions"][k]
+        EF = float(an.fermi_energy_semiclassical(N))
+        ax.plot(curves[f"fermions_N{N}_T"] / EF, (curves[f"fermions_N{N}_mu"] + 1.5) / EF, color=c, lw=1.1)
+        sel = _rows(rows, "fermions", N)
+        _eb(ax, _col(sel, "T") / EF, (_col(sel, "mu_ajuste") + 1.5) / EF, _col(sel, "mu_ajuste_err") / EF, c,
+            marker=MARKERS[k], label=f"N = {N}")
+    ax.axhline(0, color=AXIS, lw=0.8)
+    ax.plot([], [], color=INK2, lw=1.1, label=r"Fermi–Dirac con $\langle N\rangle = N$ (niveles discretos)")
+    ax.set(xlabel=r"$T/E_F$,  $E_F = (6N)^{1/3}\,\hbar\omega$",
+           ylabel=r"$(\mu + \frac{3}{2}\hbar\omega)/E_F$",
+           title="Potencial químico de los fermiones (ajuste de Fermi–Dirac a la ocupación simulada)", xlim=(0, 2.6))
+    ax.legend(loc="lower left")
+    fig.tight_layout()
+    return save(fig, out_dir, "fig_chemical_potential_fermions")
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +423,7 @@ def fig_user_comparison(result: dict, out_path: Path) -> Path:
     ax.plot(x_t[order], y_t[order], color=INK, lw=1.2, marker="o", ms=3.5, mfc="white", label="datos teóricos (usuario)")
     _eb(ax, x_s, y_s, e_s, COLOR[stat], marker="s", label=f"simulación ({'BE' if stat == 'bosons' else 'FD'})")
     if obs == "occupation":
-        ax.set_yscale("log" if stat == "bosons" else "linear")
+        _plain_axis(ax)
     ax.set(ylabel=result["y_label"],
            title=f"{NAME[stat]}, N = {result['N']}, $q_{{max}}$ = {result['q_max']}"
                  + (f", T = {result['T']:g}" if obs == "occupation" else ""))

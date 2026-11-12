@@ -17,7 +17,7 @@ PY = sys.executable
 ACTIONS = [
     ("1", "Simulación individual (bosones o fermiones) con resumen de errores", [PY, "scripts/interactive_cli.py"], False),
     ("2", "Comparar datos teóricos propios con la simulación (número de estados máximo a elección)", [PY, "scripts/compare_theory.py"], False),
-    ("3", "Validación contra resultados exactos (N = 1, N = 3, dos núcleos)", [PY, "scripts/run_validation.py"], True),
+    ("3", "Validación contra resultados exactos (N = 1, N = 3, N = 10)", [PY, "scripts/run_validation.py"], True),
     ("4", "Validación de equilibración y autocorrelación", [PY, "scripts/run_equilibration.py"], True),
     ("5", "Barridos: corte q_max, temperatura y N, ocupaciones con N = 45", [PY, "scripts/run_sweeps.py"], True),
     ("6", "Generar las figuras (fig/) y visualización", [PY, "scripts/plot_results.py"], True),

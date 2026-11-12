@@ -74,7 +74,6 @@ def compare_with_theory(
     T: float | None = None,
     n_steps: int = 20_000_000,
     seed: int = 12345,
-    proposal: str = "particle",
     verbose: bool = True,
 ) -> dict:
     """Corre la simulación con el q_max dado y la compara punto por punto con la teoría del usuario.
@@ -92,8 +91,7 @@ def compare_with_theory(
     if observable == "occupation":
         if T is None:
             raise ValueError("Para la ocupación se necesita una temperatura T.")
-        res = run_mcmc_chain(N, 1.0 / T, q_max, statistics, n_steps, int(BURN_FRACTION * n_steps), n_steps // N_SAMPLES,
-                             seed, "ground", proposal)
+        res = run_mcmc_chain(N, 1.0 / T, q_max, statistics, n_steps, int(BURN_FRACTION * n_steps), n_steps // N_SAMPLES, seed, "ground")
         obs = compute_observables(res["E_trace"], res["level_trace"], N)
         seeds.append(seed)
         for x in theory_x:
@@ -110,8 +108,7 @@ def compare_with_theory(
             if Tk <= 0:
                 raise ValueError("Las temperaturas deben ser positivas.")
             s = seed + k
-            res = run_mcmc_chain(N, 1.0 / Tk, q_max, statistics, n_steps, int(BURN_FRACTION * n_steps), n_steps // N_SAMPLES,
-                                 s, "ground", proposal)
+            res = run_mcmc_chain(N, 1.0 / Tk, q_max, statistics, n_steps, int(BURN_FRACTION * n_steps), n_steps // N_SAMPLES, s, "ground")
             obs = compute_observables(res["E_trace"], res["level_trace"], N)
             sim_x.append(Tk)
             sim_y.append(obs[key])
@@ -129,7 +126,7 @@ def compare_with_theory(
         err_pct = 100.0 * np.abs(sim_y - theory_y) / np.abs(theory_y)
     return {
         "statistics": statistics, "N": int(N), "q_max": int(q_max), "observable": observable, "T": T,
-        "proposal": proposal, "n_steps": n_steps, "seeds": seeds,
+        "algorithm": "metropolis-hastings", "n_steps": n_steps, "seeds": seeds,
         "theory_x": theory_x, "theory_y": theory_y,
         "sim_x": sim_x, "sim_y": sim_y, "sim_err": sim_err, "z": z, "error_pct": err_pct,
         "x_label": OBSERVABLES[observable]["x"], "y_label": OBSERVABLES[observable]["y"],

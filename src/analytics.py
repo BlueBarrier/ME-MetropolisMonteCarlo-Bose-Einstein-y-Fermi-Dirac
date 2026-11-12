@@ -15,9 +15,11 @@
    Todos los coeficientes son positivos y se trabaja con logaritmos, así que el
    cálculo es numéricamente estable a cualquier temperatura (no hay cancelaciones).
 4. Ensemble gran canónico: distribuciones de Fermi–Dirac y Bose–Einstein con μ
-   fijado por ⟨N⟩ = N (esto permite comparar entre ensembles).
+   fijado por ⟨N⟩ = N (referencia para el potencial químico de los fermiones).
 5. Límite termodinámico: T_c = (N/ζ(3))^{1/3}, su corrección de tamaño finito y
    la energía de Fermi.
+6. Calor específico y potencial químico: C/N canónico exacto (derivada de ⟨E⟩) y los límites termodinámicos en la trampa (transición
+   lambda de los bosones, ley lineal de Sommerfeld y μ(T) de los fermiones).
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from __future__ import annotations
 from itertools import combinations, combinations_with_replacement
 
 import numpy as np
+from scipy.integrate import quad
 from scipy.optimize import brentq
 from scipy.special import expit, gammaln, zeta
 
@@ -32,6 +35,7 @@ from .model import STATISTICS, fermi_level, ground_state_energy, level_degenerac
 
 ZETA2 = float(zeta(2))
 ZETA3 = float(zeta(3))
+ZETA4 = float(zeta(4))
 # Coeficiente de la corrección de tamaño finito (Grossmann y Holthaus 1995):
 # ΔT_c/T_c ≈ -C_FS N^{-1/3},  C_FS = ζ(2) / (2 ζ(3)^{2/3}) ≈ 0.7275.
 C_FS = ZETA2 / (2.0 * ZETA3 ** (2.0 / 3.0))
@@ -55,7 +59,8 @@ def exact_single_particle_energy_truncated(beta: float, q_max: int) -> float:
 def classical_energy_per_particle(beta):
     """E/N de partículas distinguibles (Maxwell–Boltzmann) en la trampa: 3/(e^β - 1).
 
-    Es la referencia "clásica" (sin efectos de intercambio). Tiende a 3T si T ≫ 1.
+    Es la referencia "clásica" (sin efectos de intercambio). Como se omite la energía de
+    punto cero (3/2 por partícula), para T ≫ 1 tiende a 3T − 3/2, no a 3T.
     """
     return exact_single_particle_energy(beta)
 
@@ -315,13 +320,6 @@ def condensate_fraction_thermodynamic(T, N):
     return np.clip(1.0 - t**3, 0.0, None)
 
 
-def condensate_fraction_finite_size(T, N):
-    """N_0/N ≈ 1 - t^3 - (3ζ(2)/(2ζ(3)^{2/3})) t^2 N^{-1/3},  t = T/T_c."""
-    N = np.asarray(N, dtype=float)
-    t = np.asarray(T, dtype=float) / bec_critical_temperature(N)
-    return np.clip(1.0 - t**3 - 3.0 * C_FS * t**2 * N ** (-1.0 / 3.0), 0.0, None)
-
-
 def fermi_energy(N: int) -> int:
     """Energía de Fermi de N fermiones en el estado base (nivel ε_F más alto ocupado)."""
     return fermi_level(N)
@@ -335,6 +333,83 @@ def ground_state_energy_per_particle(N: int, statistics: str) -> float:
 def fermi_energy_semiclassical(N):
     """E_F ≈ (6N)^{1/3} ħω (aproximación continua, N ≫ 1)."""
     return (6.0 * np.asarray(N, dtype=float)) ** (1.0 / 3.0)
+
+
+
+# ---------------------------------------------------------------------------
+# 6. Calor específico y potencial químico
+# ---------------------------------------------------------------------------
+def heat_capacity_canonical(N: int, q_max: int, T: float, statistics: str, rel_step: float = 1e-3) -> float:
+    """C/(N k_B) canónico exacto: derivada central de ⟨E⟩/N respecto a T con el corte fijo."""
+    h = rel_step * T
+    e_plus = exact_canonical(N, q_max, 1.0 / (T + h), statistics)["energy_per_particle"]
+    e_minus = exact_canonical(N, q_max, 1.0 / (T - h), statistics)["energy_per_particle"]
+    return (e_plus - e_minus) / (2.0 * h)
+
+
+def _bose_g(n: int, alpha: float) -> float:
+    """g_n(z) = Li_n(z) con z = e^{-α}, α ≥ 0 (integral de Bose)."""
+    if alpha <= 0.0:
+        return float(zeta(n))
+    val, _ = quad(lambda x: x ** (n - 1) * np.exp(-(x + alpha)) / -np.expm1(-(x + alpha)), 0.0, np.inf, limit=200)
+    return float(val / np.exp(gammaln(n)))
+
+
+def _fermi_f(n: int, eta: float) -> float:
+    """f_n(z) = −Li_n(−z) con z = e^{η} (integral de Fermi–Dirac completa)."""
+    upper = max(eta, 0.0) + 60.0
+    pts = [eta] if 0.0 < eta < upper else None
+    val, _ = quad(lambda x: x ** (n - 1) * expit(eta - x), 0.0, upper, points=pts, limit=400)
+    return float(val / np.exp(gammaln(n)))
+
+
+def bose_heat_capacity_thermodynamic(t):
+    """C/(N k_B) del gas de Bose ideal en la trampa armónica 3D (N → ∞), t = T/T_c.
+
+        t < 1:  C/Nk = 12 ζ(4)/ζ(3) · t³                    (≈ 10.8 en T_c⁻)
+        t > 1:  C/Nk = 12 g_4(z)/g_3(z) − 9 g_3(z)/g_2(z),   g_3(z) = ζ(3)/t³
+    El salto en T_c vale 9 ζ(3)/ζ(2) ≈ 6.6 y para t → ∞ tiende al valor clásico 3.
+    """
+    out = []
+    for ti in np.atleast_1d(np.asarray(t, dtype=float)):
+        if ti <= 1.0:
+            out.append(12.0 * ZETA4 / ZETA3 * ti**3)
+            continue
+        target = ZETA3 / ti**3
+        alpha = brentq(lambda a: _bose_g(3, a) - target, 1e-12, 60.0, xtol=1e-12)
+        g2, g3, g4 = _bose_g(2, alpha), _bose_g(3, alpha), _bose_g(4, alpha)
+        out.append(12.0 * g4 / g3 - 9.0 * g3 / g2)
+    out = np.array(out)
+    return out if np.ndim(t) else float(out[0])
+
+
+def _fermi_eta(t: float) -> float:
+    """η = μ/T del gas de Fermi en la trampa (N → ∞): f_3(e^η) = (1/6)(E_F/T)³, t = T/E_F."""
+    target = 1.0 / (6.0 * t**3)
+    return brentq(lambda e: _fermi_f(3, e) - target, -60.0, 2.0 / t + 10.0, xtol=1e-12)
+
+
+def fermi_heat_capacity_thermodynamic(t):
+    """C/(N k_B) del gas de Fermi ideal en la trampa armónica 3D (N → ∞), t = T/E_F.
+
+        C/Nk = 12 f_4(z)/f_3(z) − 9 f_3(z)/f_2(z);   a T baja ≈ π² t (Sommerfeld), y → 3 a T alta.
+    """
+    out = []
+    for ti in np.atleast_1d(np.asarray(t, dtype=float)):
+        eta = _fermi_eta(ti)
+        f2, f3, f4 = _fermi_f(2, eta), _fermi_f(3, eta), _fermi_f(4, eta)
+        out.append(12.0 * f4 / f3 - 9.0 * f3 / f2)
+    out = np.array(out)
+    return out if np.ndim(t) else float(out[0])
+
+
+def fermi_chemical_potential_thermodynamic(t):
+    """μ/E_F del gas de Fermi ideal en la trampa (N → ∞), t = T/E_F.
+
+    A T baja ≈ 1 − (π²/3) t² (Sommerfeld); cruza cero en t = (6·(3/4)ζ(3))^{-1/3} ≈ 0.57.
+    """
+    out = np.array([ti * _fermi_eta(ti) for ti in np.atleast_1d(np.asarray(t, dtype=float))])
+    return out if np.ndim(t) else float(out[0])
 
 
 def _check(statistics: str) -> None:

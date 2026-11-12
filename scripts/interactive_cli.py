@@ -10,7 +10,7 @@ Modo directo (reproducible, sin preguntas):
 Muestra la semilla usada, E/N y f_0 con su incertidumbre (corregida por autocorrelación),
 la discrepancia en σ y el error porcentual frente a la solución canónica exacta, y la
 comparación con el ensemble gran canónico (Bose–Einstein o Fermi–Dirac).
-Opcionalmente guarda los datos crudos y una figura de ⟨n(ε)⟩.
+Opcionalmente guarda los datos crudos y un histograma del número medio de ocupación por estado ⟨n(ε)⟩.
 """
 
 from __future__ import annotations
@@ -90,14 +90,12 @@ def interactive_params() -> argparse.Namespace:
     else:
         T = _ask("Temperatura reducida T = k_B T/(ħω)", 1.5, float)
     q_max = _ask("Corte energético q_max (0 = automático)", 0, int)
-    proposal = _ask("Núcleo: (p)artícula / Metropolis–Hastings o (s)imétrico / estados", "p",
-                    _choice({"p": "particle", "s": "state"}))
     steps = _ask("Pasos de producción", 20_000_000, lambda s: int(float(s)))
     seed = _ask("Semilla (vacío = aleatoria)", "", str)
     init = _ask("Estado inicial: (g)round o (e)xcited", "g", _choice({"g": "ground", "e": "excited"}))
     save = _ask("¿Guardar datos crudos y figura? (s/n)", "s", lambda s: s.lower().startswith("s"))
     return argparse.Namespace(statistics=stat, N=N, T=T, T_kelvin=T_kelvin, omega=omega, q_max=q_max,
-                              proposal=proposal, steps=steps, seed=int(seed) if seed else None, init=init,
+                              steps=steps, seed=int(seed) if seed else None, init=init,
                               save=save, plot=save)
 
 
@@ -113,9 +111,9 @@ def run(args: argparse.Namespace) -> dict:
     q = args.q_max if args.q_max and args.q_max > 0 else an.choose_q_max(N, T, stat)
     steps = max(int(args.steps) // 20_000 * 20_000, 20_000)
 
-    print(f"\nCorriendo: {stat}, N = {N}, T = {T:.4g} ħω/k_B, q_max = {q}, núcleo = {args.proposal}, "
+    print(f"\nCorriendo: {stat}, N = {N}, T = {T:.4g} ħω/k_B, q_max = {q}, "
           f"pasos = {steps:.2e}, semilla = {seed}")
-    res = run_mcmc_chain(N, 1.0 / T, q, stat, steps, int(BURN_FRACTION * steps), steps // 20_000, seed, args.init, args.proposal)
+    res = run_mcmc_chain(N, 1.0 / T, q, stat, steps, int(BURN_FRACTION * steps), steps // 20_000, seed, args.init)
     obs = compute_observables(res["E_trace"], res["level_trace"], N)
     ex = an.exact_canonical(N, q, 1.0 / T, stat)
     gc = an.grand_canonical_observables(N, q, 1.0 / T, stat)
@@ -171,15 +169,12 @@ def _plot(obs, ex, gc, stat, N, T, seed, path):
     pl.apply_style()
     fig, ax = plt.subplots(figsize=(6.2, 4))
     eps = obs["levels"]
-    keep = ex["occupation"] > 1e-5
-    ax.plot(eps[keep], ex["occupation"][keep], color=pl.COLOR[stat], label="canónico exacto")
-    ax.plot(eps[keep], gc["occupation"][keep], color=pl.INK2, ls="--", label="gran canónico (" + ("BE" if stat == "bosons" else "FD") + ")")
-    vis = keep & (obs["occupation"] > 0)
-    ax.errorbar(eps[vis], obs["occupation"][vis], yerr=obs["occupation_err"][vis], fmt="o", color=pl.COLOR[stat],
-                ms=4.5, capsize=2, label="simulación")
-    if stat == "bosons":
-        ax.set_yscale("log")
-    ax.set(xlabel=r"$\varepsilon$  [$\hbar\omega$]", ylabel=r"$\langle n(\varepsilon)\rangle$ por estado",
+    g = obs["degeneracy"]
+    keep = g * ex["occupation"] > 0.02
+    m = eps <= (int(eps[keep].max()) if keep.any() else int(eps.max()))
+    pl._level_histogram(ax, eps[m], obs["occupation"][m], ex["occupation"][m],
+                        pl.COLOR[stat], pl.RAMP[stat][3])
+    ax.set(xlabel=r"$\varepsilon$  [$\hbar\omega$]", ylabel=r"número medio de ocupación  $\langle n(\varepsilon)\rangle$",
            title=f"{pl.NAME[stat]}, N = {N}, T = {T:.3g}, semilla {seed}")
     ax.legend()
     fig.tight_layout()
@@ -197,7 +192,6 @@ def main() -> None:
     parser.add_argument("--T-kelvin", type=_eval_number, default=None, help="Temperatura en K (requiere --omega)")
     parser.add_argument("--omega", type=_eval_number, default=None, help="Frecuencia de la trampa en rad/s")
     parser.add_argument("--q-max", type=int, default=0, help="Corte energético (0 = automático)")
-    parser.add_argument("--proposal", choices=("particle", "state"), default="particle")
     parser.add_argument("--steps", type=lambda s: int(float(s)), default=20_000_000)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--init", choices=("ground", "excited"), default="ground")

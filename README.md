@@ -108,13 +108,16 @@ Para regenerar una sola desde los datos crudos:
 
 | Archivo | Nombre interno (`--only`) | Contenido | Datos crudos generados por | Datos en `data/raw/` |
 |---|---|---|---|---|
-| `fig/01_validacion_contra_resultados_exactos.png` | `fig_validation` | (a) N = 1 vs $3/(e^\beta-1)$, dos núcleos; (b) N = 3 vs enumeración; (c) discrepancias en σ | `scripts/run_validation.py` | `validation.npz`, `validation_table.csv` |
-| `fig/02_equilibracion_desde_dos_estados_iniciales.png` | `fig_equilibration` | E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
+| `fig/01a_validacion_N1_energia_vs_formula_analitica.png` | `fig_validation` | N = 1 frente a $3/(e^eta-1)$ | `scripts/run_validation.py` | `validation.npz` |
+| `fig/01b_validacion_N3_ocupaciones_vs_enumeracion.png` | `fig_validation` | N = 3: histograma de ⟨n(ε)⟩ frente a la enumeración (BE y FD) | `scripts/run_validation.py` | `validation.npz` |
+| `fig/01c_validacion_discrepancias_en_sigmas.png` | `fig_validation` | z de cada una de las 29 comparaciones de validación | `scripts/run_validation.py` | `validation_table.csv` |
+| `fig/02a_equilibracion_bosones_desde_dos_estados_iniciales.png` | `fig_equilibration` | Bosones: E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
+| `fig/02b_equilibracion_fermiones_desde_dos_estados_iniciales.png` | `fig_equilibration` | Fermiones: E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
 | `fig/03_autocorrelacion_de_la_energia.png` | `fig_autocorrelation` | C(t) y τ_int; cuánto subestima el error ingenuo | `scripts/run_equilibration.py` | `equilibration.npz` |
 | `fig/04_convergencia_en_el_corte_energetico_qmax.png` | `fig_qmax_convergence` | Error de truncamiento vs error estadístico en función de $q_{max}$ | `scripts/run_sweeps.py` (parte A) | `qmax_convergence.npz` |
 | `fig/05_energia_por_particula_vs_temperatura.png` | `fig_energy_vs_T` | ⟨E⟩/N vs T para BE y FD, N = 10–56, y referencia clásica | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
 | `fig/06_fraccion_de_condensado_bosones_vs_T.png` | `fig_condensate_fraction` | $f_0$ vs $T/T_c$ y límite termodinámico | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
-| `fig/07_ocupaciones_bosones_vs_fermiones_N45.png` | `fig_occupations` | ⟨n(ε)⟩ con N = 45: simulación (puntos) vs canónico exacto vs BE/FD gran canónico | `scripts/run_sweeps.py` (parte C) | `occupations.npz` |
+| `fig/07_ocupaciones_bosones_vs_fermiones_N45.png` | `fig_occupations` | Histograma del número medio de ocupación ⟨n(ε)⟩ con N = 45: simulación (barras) vs canónico exacto | `scripts/run_sweeps.py` (parte C) | `occupations.npz` |
 | `fig/08_energia_canonico_vs_gran_canonico_BE_FD.png` | `fig_ensemble_comparison` | Diferencia relativa de energía canónico − gran canónico, BE y FD | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
 | `fig/09_animacion_relajacion_al_equilibrio_N56.gif` | — | Relajación al equilibrio (N = 56): ~8 s de relajación hasta n_burn y los últimos ~4 s en equilibrio, con el promedio acumulado sobre el exacto | `scripts/make_animation.py` | `animation.npz` |
 | `fig/comparaciones/*.png` | — | Teoría del usuario vs simulación | `scripts/compare_theory.py` | `comparaciones/*.csv` |
@@ -137,7 +140,7 @@ y se recalculan solas si faltan.
 ├── docs/               fundamentos.md (teoría y justificación), revision_rubrica.md
 ├── src/
 │   ├── model.py          Catálogo de estados 3D, Hamiltoniano, unidades SI↔reducidas, inicialización
-│   ├── metropolis.py     Núcleos MCMC (Metropolis simétrico y Metropolis–Hastings) con numba
+│   ├── metropolis.py     Algoritmo de Metropolis–Hastings (MCMC) con numba
 │   ├── analytics.py      Exactos: N = 1, enumeración, función generatriz canónica, gran canónico, T_c, ε_F
 │   ├── stats.py          τ_int (Sokal / primer cero), error corregido, discrepancia z, equilibración
 │   ├── observables.py    E/N, f_0 = ⟨n_0⟩/N, ⟨n(ε)⟩ con incertidumbre y comparación con referencias
@@ -170,9 +173,8 @@ y se recalculan solas si faltan.
   statistics, mode, rng)` crea un estado base (`"ground"`) o una configuración aleatoria a $T=\infty$
   (`"excited"`). `compute_total_energy(n, energies, omega=None)` evalúa $H(\mathbf n)$, en J si se
   da ω. `reduced_temperature`, `kelvin_temperature` y `energy_to_joules` convierten unidades.
-- **`metropolis`**: `metropolis_step` (núcleo simétrico de la propuesta aprobada),
-  `metropolis_hastings_step` (partícula al azar con factor de Hastings) y
-  `run_mcmc_chain(N, beta, q_max, statistics, n_steps, n_burn, sample_interval, seed, init_mode, proposal)`,
+- **`metropolis`**: `metropolis_hastings_step` (partícula al azar con factor de Hastings) y
+  `run_mcmc_chain(N, beta, q_max, statistics, n_steps, n_burn, sample_interval, seed, init_mode)`,
   que devuelve las trazas de E y de las ocupaciones por nivel, la aceptación y los metadatos.
 - **`analytics`**: `exact_single_particle_energy`, `exact_canonical_enumeration` (fuerza bruta),
   `exact_canonical` (cualquier N, funciones generatrices), `grand_canonical_observables` (μ fijado por N),
@@ -188,7 +190,7 @@ y se recalculan solas si faltan.
 - Todas las semillas salen de `BASE_SEED = 20261112` (`src/config.py`) con
   `make_seed(*claves)` (`numpy.random.SeedSequence`). La semilla entera de cada corrida
   queda en su `.npz` (campo `metadata`), en `sweep_summary.csv` y en `validation_table.csv`.
-- Generador: `numpy.random.default_rng(seed)` (PCG64), usado dentro de los núcleos de numba.
+- Generador: `numpy.random.default_rng(seed)` (PCG64), usado dentro de las funciones compiladas con numba.
   Misma semilla ⇒ misma cadena, bit a bit (`test_seed_reproducibility`).
 - Cada `.npz` guarda la fecha, el commit de git y las versiones de Python, numpy, scipy,
   numba y matplotlib.
@@ -201,7 +203,7 @@ python scripts/interactive_cli.py
 ```
 
 Pregunta la estadística (bosones o fermiones), N, la temperatura (reducida, o en kelvin junto
-con ω en rad/s), el corte, el núcleo, los pasos y la semilla (si se deja vacía se genera una y
+con ω en rad/s), el corte, los pasos y la semilla (si se deja vacía se genera una y
 se muestra). Al terminar imprime E/N y $f_0$ con σ, la discrepancia en σ y el **error
 porcentual** frente a la solución canónica exacta, la desviación respecto a BE/FD gran
 canónico, μ, τ_int, la aceptación y la **semilla usada**. Opcionalmente guarda los datos
@@ -216,8 +218,9 @@ python scripts/interactive_cli.py --statistics fermions --N 20 --T 1.5 --seed 42
 Corrida completa con las semillas de `src/config.py`. Las incertidumbres son 1σ, corregidas por autocorrelación.
 
 **Validación.**
-- 68 comparaciones contra resultados exactos: N = 1 contra la fórmula analítica, N = 3 contra
-  enumeración y los dos núcleos con N = 10. Discrepancia media z = 0.77, máxima 2.48, y 97 % con z < 2.
+- 29 comparaciones contra resultados exactos, todas con Metropolis–Hastings: N = 1 contra la fórmula
+  analítica, N = 3 contra enumeración y N = 10 contra la solución canónica exacta. Discrepancia media
+  z = 0.73, máxima 1.92, y 100 % con z < 2.
 - La función generatriz y la enumeración coinciden hasta 1.2 × 10⁻¹³.
 - En las 104 corridas del barrido (BE y FD, N = 10–56, T = 0.25–5) cada punto se compara con la
   solución canónica exacta: z(E/N) tiene media 0.83 (la distribución semi-normal ideal da

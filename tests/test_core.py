@@ -1,4 +1,4 @@
-"""Pruebas de los componentes: modelo, soluciones exactas, núcleos MCMC y estadística."""
+"""Pruebas de los componentes: modelo, soluciones exactas, calor específico, Metropolis–Hastings y estadística."""
 
 from itertools import combinations, combinations_with_replacement
 
@@ -7,7 +7,7 @@ import pytest
 
 from src import analytics as an
 from src import model
-from src.metropolis import metropolis_hastings_step, metropolis_step, particle_labels, run_mcmc_chain
+from src.metropolis import metropolis_hastings_step, particle_labels, run_mcmc_chain
 from src.stats import (
     discrepancy_in_sigmas,
     integrated_autocorrelation_time,
@@ -100,34 +100,27 @@ def test_choose_q_max_bounds_truncation():
         assert abs(an.truncation_error(10, q, 0.5, statistics)) <= 1e-4 * 2.0
 
 
-# ---------------------------------------------------------------- núcleos
+# ---------------------------------------------------------------- Metropolis–Hastings
 @pytest.mark.parametrize("statistics", model.STATISTICS)
-@pytest.mark.parametrize("proposal", ["state", "particle"])
-def test_kernels_conserve_particles_and_pauli(statistics, proposal):
-    # Cada cadena usa un solo núcleo (las etiquetas ``owner`` sólo las mantiene el de Hastings).
+def test_kernel_conserves_particles_and_pauli(statistics):
     energies, _ = model.build_state_catalog(6)
     rng = np.random.default_rng(3)
     n = model.initialize_configuration(8, energies.size, statistics, "excited", rng)
     owner = particle_labels(n)
     E = model.compute_total_energy(n, energies)
     for _ in range(20_000):
-        if proposal == "state":
-            acc, dE = metropolis_step(n, energies, 0.8, statistics, rng)
-        else:
-            acc, dE = metropolis_hastings_step(n, owner, energies, 0.8, statistics, rng)
+        acc, dE = metropolis_hastings_step(n, owner, energies, 0.8, statistics, rng)
         E += dE
         assert n.min() >= 0
         if statistics == "fermions":
             assert n.max() <= 1
     assert n.sum() == 8
     assert E == model.compute_total_energy(n, energies)
-    if proposal == "particle":
-        np.testing.assert_array_equal(np.bincount(owner, minlength=n.size), n)
+    np.testing.assert_array_equal(np.bincount(owner, minlength=n.size), n)
 
 
 @pytest.mark.parametrize("statistics", model.STATISTICS)
-@pytest.mark.parametrize("proposal", ["state", "particle"])
-def test_stationary_distribution_over_microstates(statistics, proposal):
+def test_stationary_distribution_over_microstates(statistics):
     """La frecuencia de cada microestado converge a e^{-βE}/Z (balance detallado).
 
     Sistema mínimo: N = 2, q_max = 1 (4 estados con ε = 0, 1, 1, 1).
@@ -147,10 +140,7 @@ def test_stationary_distribution_over_microstates(statistics, proposal):
     n_steps = 120_000
     visits = np.empty(n_steps, dtype=np.int64)
     for t in range(n_steps):
-        if proposal == "state":
-            metropolis_step(n, energies, beta, statistics, rng)
-        else:
-            metropolis_hastings_step(n, owner, energies, beta, statistics, rng)
+        metropolis_hastings_step(n, owner, energies, beta, statistics, rng)
         visits[t] = index[tuple(n)]
     for k, p in enumerate(p_exact):
         mean, _, err = statistical_uncertainty((visits == k).astype(float))
@@ -158,9 +148,9 @@ def test_stationary_distribution_over_microstates(statistics, proposal):
 
 
 def test_seed_reproducibility():
-    a = run_mcmc_chain(10, 0.7, 10, "bosons", 300_000, 1000, 100, 123, "excited", "particle")
-    b = run_mcmc_chain(10, 0.7, 10, "bosons", 300_000, 1000, 100, 123, "excited", "particle")
-    c = run_mcmc_chain(10, 0.7, 10, "bosons", 300_000, 1000, 100, 124, "excited", "particle")
+    a = run_mcmc_chain(10, 0.7, 10, "bosons", 300_000, 1000, 100, 123, "excited")
+    b = run_mcmc_chain(10, 0.7, 10, "bosons", 300_000, 1000, 100, 123, "excited")
+    c = run_mcmc_chain(10, 0.7, 10, "bosons", 300_000, 1000, 100, 124, "excited")
     np.testing.assert_array_equal(a["E_trace"], b["E_trace"])
     np.testing.assert_array_equal(a["level_trace"], b["level_trace"])
     assert not np.array_equal(a["E_trace"], c["E_trace"])
@@ -202,3 +192,43 @@ def test_theory_comparison_against_exact_values():
     res = compare_with_theory("fermions", 10, 12, "energy", x, theory, n_steps=2_000_000, seed=5, verbose=False)
     assert np.all(np.abs(res["z"]) < 3.5)
     assert res["seeds"] == [5, 6]
+
+
+
+# ---------------------------------------------------------------- calor específico y potencial químico
+def test_heat_capacity_single_particle():
+    """N = 1: C = d/dT [3/(e^β − 1)] = 3 β² e^β / (e^β − 1)²."""
+    for T in (0.5, 1.0, 3.0):
+        b = 1.0 / T
+        exact = 3 * b**2 * np.exp(b) / np.expm1(b) ** 2
+        q = an.reference_cutoff(1, T, "bosons")
+        assert an.heat_capacity_canonical(1, q, T, "bosons") == pytest.approx(exact, rel=1e-6)
+
+
+def test_bose_lambda_point_thermodynamic_limit():
+    z3, z2, z4 = an.ZETA3, an.ZETA2, an.ZETA4
+    assert an.bose_heat_capacity_thermodynamic(0.5) == pytest.approx(12 * z4 / z3 * 0.125)
+    below = an.bose_heat_capacity_thermodynamic(1.0)
+    above = an.bose_heat_capacity_thermodynamic(1.0 + 1e-7)
+    assert below == pytest.approx(12 * z4 / z3)              # ≈ 10.8
+    assert below - above == pytest.approx(9 * z3 / z2, rel=1e-3)  # salto ≈ 6.6
+    assert an.bose_heat_capacity_thermodynamic(20.0) == pytest.approx(3.0, abs=2e-3)
+
+
+def test_fermi_thermodynamic_limits():
+    assert an.fermi_heat_capacity_thermodynamic(0.01) == pytest.approx(np.pi**2 * 0.01, rel=5e-3)
+    assert an.fermi_heat_capacity_thermodynamic(10.0) == pytest.approx(3.0, abs=2e-3)
+    assert an.fermi_chemical_potential_thermodynamic(0.02) == pytest.approx(1 - np.pi**2 / 3 * 0.02**2, abs=1e-6)
+    t0 = (1 / (6 * 0.75 * an.ZETA3)) ** (1 / 3)  # μ = 0 cuando f_3(1) = 3ζ(3)/4
+    assert an.fermi_chemical_potential_thermodynamic(t0) == pytest.approx(0.0, abs=1e-8)
+
+
+def test_fit_chemical_potential_recovers_fermi_dirac():
+    from src.observables import fit_chemical_potential
+
+    eps = np.arange(15.0)
+    T, mu = 0.8, 4.3
+    occ = 1 / (np.exp((eps - mu) / T) + 1)
+    m, err = fit_chemical_potential(eps, occ, np.full(eps.size, 1e-3), T)
+    assert m == pytest.approx(mu, abs=1e-6)
+    assert err < 1e-2

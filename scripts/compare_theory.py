@@ -53,7 +53,7 @@ def interactive_args() -> argparse.Namespace:
     steps = _ask("Pasos por simulación", 20_000_000, lambda s: int(float(s)))
     seed = _ask("Semilla (vacío = aleatoria)", "", str)
     return argparse.Namespace(statistics=stat, N=N, q_max=q_max, observable=obs, T=T, theory=theory, data=text,
-                              steps=steps, seed=int(seed) if seed else None, proposal="particle", no_show=False)
+                              steps=steps, seed=int(seed) if seed else None, no_show=False)
 
 
 def run(args: argparse.Namespace) -> dict:
@@ -67,7 +67,7 @@ def run(args: argparse.Namespace) -> dict:
     print(f"\nSimulando {args.statistics}, N = {args.N}, q_max = {args.q_max}, observable = {args.observable}, "
           f"{len(tx)} puntos, {args.steps:.1e} pasos por simulación, semilla = {seed}")
     res = compare_with_theory(args.statistics, args.N, args.q_max, args.observable, tx, ty, T=args.T,
-                              n_steps=args.steps, seed=seed, proposal=args.proposal)
+                              n_steps=args.steps, seed=seed)
     rows = [{"x": x, "teoria": t, "simulacion": s, "sigma": e, "z": z, "error_%": p}
             for x, t, s, e, z, p in zip(res["sim_x"], res["theory_y"], res["sim_y"], res["sim_err"],
                                         res["z"], res["error_pct"])]
@@ -101,7 +101,6 @@ def main() -> None:
     p.add_argument("--data", default=None, help="Pares escritos a mano: 'x y; x y; ...'")
     p.add_argument("--steps", type=lambda s: int(float(s)), default=20_000_000)
     p.add_argument("--seed", type=int, default=None)
-    p.add_argument("--proposal", choices=("particle", "state"), default="particle")
     p.add_argument("--no-show", action="store_true", help="No abrir la ventana con la figura")
     args = p.parse_args()
     if args.statistics is None:
