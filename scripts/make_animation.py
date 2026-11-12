@@ -93,7 +93,7 @@ def animate(raw_dir, fig_dir) -> None:
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         pl._plain_axis(ax)
         if stat == "fermions":
-            ax.axvline(an.fermi_energy(N) + 0.5, color=pl.MUTED, ls=":", lw=1.0)
+            ax.axvline(an.fermi_energy(N), color=pl.MUTED, ls=":", lw=1.0)
         ax.set(xlabel=r"$\varepsilon$  [$\hbar\omega$]", ylabel=r"número de ocupación por estado  $n(\varepsilon)$",
                title=f"{pl.NAME[stat]}, N = {N}, T = {T:g}")
         ax.legend(loc="upper right", fontsize=7)

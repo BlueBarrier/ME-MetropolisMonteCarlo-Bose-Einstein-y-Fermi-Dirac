@@ -4,7 +4,7 @@ Proyecto final de **Mecánica Estadística** (Universidad del Valle de Guatemala
 
 Simulación de gases ideales de **bosones** y **fermiones** (una componente de espín) en una trampa armónica isotrópica 3D, en el **ensemble canónico** ($N$, $T$, $\omega$ fijos), con **Algoritmo de Metrópolis de Monte Carlo** sobre configuraciones de ocupación. Se valida contra resultados exactos y se estudia cómo la antisimetría de la función de onda produce el llenado del mar de Fermi y la simetría de la función de onda produce la acumulación de los estados en la energía base para el condensado de Bose-Einstein, en función de $T$ y $N$.
 
-También se comparan los resultados con las distribuciones de Bose–Einstein y Fermi–Dirac del ensemble gran canónico.
+También se mide el calor específico (transición lambda de los bosones y ley lineal de los fermiones) y el potencial químico de los fermiones.
 
 ---
 
@@ -110,7 +110,6 @@ Para regenerar una sola desde los datos crudos:
 |---|---|---|---|---|
 | `fig/01a_validacion_N1_energia_vs_formula_analitica.png` | `fig_validation` | N = 1 frente a $3/(e^eta-1)$ | `scripts/run_validation.py` | `validation.npz` |
 | `fig/01b_validacion_N3_ocupaciones_vs_enumeracion.png` | `fig_validation` | N = 3: histograma de ⟨n(ε)⟩ frente a la enumeración (BE y FD) | `scripts/run_validation.py` | `validation.npz` |
-| `fig/01c_validacion_discrepancias_en_sigmas.png` | `fig_validation` | z de cada una de las 29 comparaciones de validación | `scripts/run_validation.py` | `validation_table.csv` |
 | `fig/02a_equilibracion_bosones_desde_dos_estados_iniciales.png` | `fig_equilibration` | Bosones: E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
 | `fig/02b_equilibracion_fermiones_desde_dos_estados_iniciales.png` | `fig_equilibration` | Fermiones: E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
 | `fig/03_autocorrelacion_de_la_energia.png` | `fig_autocorrelation` | C(t) y τ_int; cuánto subestima el error ingenuo | `scripts/run_equilibration.py` | `equilibration.npz` |
@@ -118,7 +117,9 @@ Para regenerar una sola desde los datos crudos:
 | `fig/05_energia_por_particula_vs_temperatura.png` | `fig_energy_vs_T` | ⟨E⟩/N vs T para BE y FD, N = 10–56, y referencia clásica | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
 | `fig/06_fraccion_de_condensado_bosones_vs_T.png` | `fig_condensate_fraction` | $f_0$ vs $T/T_c$ y límite termodinámico | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
 | `fig/07_ocupaciones_bosones_vs_fermiones_N45.png` | `fig_occupations` | Histograma del número medio de ocupación ⟨n(ε)⟩ con N = 45: simulación (barras) vs canónico exacto | `scripts/run_sweeps.py` (parte C) | `occupations.npz` |
-| `fig/08_energia_canonico_vs_gran_canonico_BE_FD.png` | `fig_ensemble_comparison` | Diferencia relativa de energía canónico − gran canónico, BE y FD | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
+| `fig/08a_calor_especifico_bosones_transicion_lambda.png` | `fig_heat_capacity_bosons` | $C_V/Nk_B$ de bosones vs $T/T_c$ (fluctuaciones de E), canónico exacto y teoría $N\to\infty$: transición lambda | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
+| `fig/08b_calor_especifico_fermiones.png` | `fig_heat_capacity_fermions` | $C_V/Nk_B$ de fermiones vs $T/E_F$: ley lineal de Sommerfeld y límite clásico 3 | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
+| `fig/08c_potencial_quimico_fermiones.png` | `fig_chemical_potential_fermions` | μ(T) de fermiones: ajuste de Fermi–Dirac a ⟨n(ε)⟩ simulado vs teoría | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
 | `fig/09_animacion_relajacion_al_equilibrio_N56.gif` | — | Relajación al equilibrio (N = 56): ~8 s de relajación hasta n_burn y los últimos ~4 s en equilibrio, con el promedio acumulado sobre el exacto | `scripts/make_animation.py` | `animation.npz` |
 | `fig/comparaciones/*.png` | — | Teoría del usuario vs simulación | `scripts/compare_theory.py` | `comparaciones/*.csv` |
 | `data/tablas/tabla_validacion.tex` | — | Tabla de validación (LaTeX) | `scripts/run_validation.py` | `validation_table.csv` |
@@ -221,44 +222,30 @@ Corrida completa con las semillas de `src/config.py`. Las incertidumbres son 1σ
 - 29 comparaciones contra resultados exactos, todas con Metropolis–Hastings: N = 1 contra la fórmula
   analítica, N = 3 contra enumeración y N = 10 contra la solución canónica exacta. Discrepancia media
   z = 0.73, máxima 1.92, y 100 % con z < 2.
-- La función generatriz y la enumeración coinciden hasta 1.2 × 10⁻¹³.
-- En las 104 corridas del barrido (BE y FD, N = 10–56, T = 0.25–5) cada punto se compara con la
-  solución canónica exacta: z(E/N) tiene media 0.83 (la distribución semi-normal ideal da
-  0.80) y 95 % de los puntos con z < 2; para z(f₀), 99 % con z < 2.
-- Como comprobación adicional, se combinaron 12 semillas independientes en tres puntos de
-  control. Los promedios coinciden con el exacto (z ≤ 1.1) y la dispersión entre semillas
-  coincide con σ (cociente 0.86–1.23): los errores están bien calibrados.
+- En las 152 corridas del barrido (BE y FD, N = 10–56, 19 temperaturas entre 0.25 y 10) cada punto se
+  compara con la solución canónica exacta: z(E/N) tiene media 0.90 y 95 % de los puntos con z < 2;
+  z(f₀), 97 %; z(C_V), 93 %.
 
 **Equilibración e incertidumbre.**
-- Las cadenas fría y caliente se cruzan a 6.8 × 10⁵ pasos (bosones, N = 35, T = 2) y a
-  3.6 × 10⁴ pasos (fermiones, N = 35, T = 1). Es muy por debajo de la termalización descartada
-  (2.4 × 10⁷ y 6 × 10⁶). En producción las dos cadenas coinciden (z = 0.47 y 0.18).
-- Para bosones, τ_int ≈ 12 mediciones: el error corregido es 5 veces el ingenuo.
-- **La termalización usada para la estadística es suficiente en todo el barrido.** Todas las corridas
-  descartan n_burn = 10 % de sus pasos (`BURN_FRACTION` en `src/config.py`, el mismo valor en todos los
-  scripts) y miden sólo después. `run_equilibration.py` lo comprueba en los 104 puntos (estadística, N, T):
-  las cadenas fría y caliente se cruzan antes de n_burn en todos, y en el peor caso (bosones, N = 56,
-  T = 5) al 47 % de n_burn. Resultado en `data/raw/burn_check.csv`.
+- Las cadenas fría y caliente se cruzan a 1.5 × 10⁶ pasos (bosones, N = 35, T = 2) y a 3.6 × 10⁴
+  pasos (fermiones, N = 35, T = 1), muy por debajo de la termalización descartada (9.6 × 10⁷ y
+  6 × 10⁶). En producción las dos cadenas coinciden (z = 1.71 y 0.18).
+- τ_int ≈ 3.2 mediciones en bosones y 0.6 en fermiones: el error corregido es 2.5 y 1.1 veces el ingenuo.
+- **La termalización es suficiente en todo el barrido**: n_burn = 10 % de los pasos (`BURN_FRACTION`),
+  y `run_equilibration.py` comprueba los 152 puntos: todos cruzan antes de n_burn; el peor caso
+  (bosones, N = 56, T = 10) al 41 %. Resultado en `data/raw/burn_check.csv`.
 
 **Condensación de Bose–Einstein (tamaño finito).**
-- A T/T_c ≈ 0.49 se obtiene f₀ = 0.627 ± 0.002, 0.674 ± 0.003, 0.712 ± 0.003 y 0.735 ± 0.004
-  para N = 10, 20, 35 y 56. Es muy por debajo del límite termodinámico 1 − (T/T_c)³ ≈ 0.88,
-  pero se acerca a él al crecer N y sigue la corrección de tamaño finito
-  1 − t³ − 3C t² N^{-1/3} (0.633, 0.690, 0.726, 0.750).
-- Con N finito el condensado aparece como un cruce gradual, no como una transición abrupta (`06_fraccion_de_condensado_bosones_vs_T.png`).
+- A T/T_c ≈ 0.49: f₀ = 0.627 ± 0.002, 0.674 ± 0.003, 0.710 ± 0.002 y 0.735 ± 0.002 para N = 10, 20,
+  35 y 56, por debajo del límite termodinámico 1 − (T/T_c)³ ≈ 0.885 (`06_fraccion_de_condensado_bosones_vs_T.png`).
+- El calor específico tiene un máximo redondeado en T/T_c ≈ 0.75 que crece con N: 3.73 ± 0.04 (N = 10)
+  a 5.14 ± 0.09 (N = 56), frente al pico singular 12ζ(4)/ζ(3) ≈ 10.8 del límite N → ∞
+  (`08a_calor_especifico_bosones_transicion_lambda.png`).
 
 **Mar de Fermi.**
-- A T = 0.25: E/N = 1.5729 ± 0.0005, 2.3161 ± 0.0003, 3.0581 ± 0.0002 y 3.8010 ± 0.0002, frente
-  a E₀/N = 1.5, 2.25, 3.0 y 3.75 del mar lleno (capas cerradas).
-- La ocupación forma un escalón en ε_F que se suaviza al subir T (`07_ocupaciones_bosones_vs_fermiones_N45.png`). A T alta,
-  bosones y fermiones convergen a la referencia clásica (`05_energia_por_particula_vs_temperatura.png`).
-
-**¿Cumple con Bose–Einstein / Fermi–Dirac? (comparación entre ensembles).**
-- La simulación reproduce la forma de BE y FD (`07_ocupaciones_bosones_vs_fermiones_N45.png`), pero con N fijo
-  la energía difiere de la del ensemble gran canónico (`08_energia_canonico_vs_gran_canonico_BE_FD.png`):
-  - en bosones es hasta 16 % mayor (N = 10, cerca de T/T_c ≈ 0.5);
-  - en fermiones es hasta 1.6 % menor.
-- La diferencia disminuye al crecer N: FD y BE se recuperan en el límite N → ∞.
+- A T = 0.25: E/N = 1.5729 ± 0.0005 (N = 10) frente a E₀/N = 1.5 del mar lleno.
+- C_V es lineal en T a baja temperatura (π² T/T_F) y tiende a 3 k_B; μ cambia de signo en T/T_F ≈ 0.57
+  y el μ ajustado coincide con Fermi–Dirac (discrepancia media 0.6σ) (`08b_…`, `08c_…`).
 
 ## Uso de herramientas de IA
 

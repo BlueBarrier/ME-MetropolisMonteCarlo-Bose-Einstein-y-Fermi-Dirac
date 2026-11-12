@@ -15,7 +15,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import MaxNLocator, ScalarFormatter
+from matplotlib.ticker import FuncFormatter, MaxNLocator, ScalarFormatter
 
 from . import analytics as an
 
@@ -277,7 +277,7 @@ def fig_condensate_fraction(rows: list[dict], curves: dict, n_values, out_dir: P
     fig, ax = plt.subplots(figsize=_fs(10.5, 4.6))
     t = np.linspace(0, 1.6, 300)
     ax.plot(t, np.clip(1 - t**3, 0, None), color=INK, ls="--", lw=1.4,
-            label=r"teoría: $\langle N_0\rangle/N = 1-(T/T_c)^3$")
+            label=r"teoría: $\langle n_0\rangle/N = 1-(T/T_c)^3$")
     for k, N in enumerate(n_values):
         c = RAMP["bosons"][k]
         Tc = float(an.bec_critical_temperature(N))
@@ -293,7 +293,7 @@ def fig_condensate_fraction(rows: list[dict], curves: dict, n_values, out_dir: P
 
 
 def fig_occupations(occ: dict, out_dir: Path):
-    """Histograma del número medio de ocupación por estado ⟨n(ε)⟩: simulación (barras) y canónico exacto.
+    """Número medio de ocupación por estado ⟨n(ε)⟩: simulación (puntos, sin barras de error) y canónico exacto (línea).
 
     ``occ`` es el contenido de data/raw/occupations.npz (ver scripts/run_sweeps.py, parte C).
     """
@@ -311,17 +311,30 @@ def fig_occupations(occ: dict, out_dir: Path):
             keep = g * ex > 0.02  # niveles con al menos ~0.02 partículas en promedio
             xmax = int(eps[keep].max()) if keep.any() else int(eps.max())
             m = eps <= xmax
-            _level_histogram(ax, eps[m], sim[m], ex[m], COLOR[stat], RAMP[stat][3])
-            if stat == "fermions":
+            vis = m & (sim > 0)
+            ax.plot(eps[m], ex[m], color=INK, lw=0.9, label="canónico exacto", zorder=2)
+            ax.plot(eps[vis], sim[vis], ls="none", marker="o", ms=2.8, color=RAMP[stat][2],
+                    label="simulación", zorder=3)
+            ax.set_xlim(-0.4, xmax + 0.4)
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            if stat == "bosons":
+                # Escala logarítmica con etiquetas decimales: muestra las ocupaciones fraccionarias
+                # de los niveles excitados (0.1, 0.01, ...) junto al condensado (n_0 ~ N).
+                ax.set_yscale("log")
+                ax.set_ylim(0.5 * ex[m].min(), 2.0 * ex[m].max())
+                ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+            else:
                 ax.set_ylim(0, 1.08)
+                _plain_axis(ax)
+            if stat == "fermions":
                 eF = an.fermi_energy(N)
-                ax.axvline(eF + 0.5, color=MUTED, ls=":", lw=1.0)
-                ax.text(eF + 0.6, ax.get_ylim()[1] * 0.95, r"$\varepsilon_F$", color=MUTED, va="top")
+                ax.axvline(eF, color=MUTED, ls=":", lw=1.0)
+                ax.text(eF + 0.15, ax.get_ylim()[1] * 0.95, r"$\varepsilon_F$", color=MUTED, va="top")
             ref = r"T/T_c" if stat == "bosons" else r"T/T_F"
             ax.set_title(f"({'abcdef'[row * len(temps) + col]}) {tag}, T = {T:g}  (${ref}$ = {T / T_ref:.2f})")
             ax.set_xlabel(r"$\varepsilon$  [$\hbar\omega$]")
             if col == 0:
-                ax.set_ylabel(r"número medio de ocupación  $\langle n(\varepsilon)\rangle$")
+                ax.set_ylabel(r"$\langle n(\varepsilon)\rangle$")
             if col == len(temps) - 1:
                 ax.legend(loc="upper right")
     fig.suptitle(f"Número medio de ocupación por estado en cada nivel de energía, N = {N}", x=0.01, ha="left", fontsize=9.5)
@@ -360,12 +373,10 @@ def fig_heat_capacity_bosons(rows: list[dict], curves: dict, n_values, out_dir: 
 
 
 def fig_heat_capacity_fermions(rows: list[dict], curves: dict, n_values, out_dir: Path):
-    """C/(N k_B) de los fermiones frente a T/E_F: lineal a T baja (Sommerfeld) y → 3 a T alta."""
+    """C/(N k_B) de los fermiones frente a T/E_F: lineal a T baja y → 3 a T alta."""
     fig, ax = plt.subplots(figsize=_fs(10.5, 5.0))
     t = np.linspace(0.01, 2.6, 220)
     ax.plot(t, an.fermi_heat_capacity_thermodynamic(t), color=INK, ls="--", lw=1.5, label=r"teoría $N\to\infty$")
-    ts = t[t < 0.3]
-    ax.plot(ts, np.pi**2 * ts, color=INK2, ls="-.", lw=1.1, label=r"Sommerfeld: $\pi^2\,T/E_F$")
     for k, N in enumerate(n_values):
         c = RAMP["fermions"][k]
         EF = float(an.fermi_energy_semiclassical(N))
@@ -390,8 +401,6 @@ def fig_chemical_potential_fermions(rows: list[dict], curves: dict, n_values, ou
     fig, ax = plt.subplots(figsize=_fs(10.5, 5.0))
     t = np.linspace(0.01, 2.6, 220)
     ax.plot(t, an.fermi_chemical_potential_thermodynamic(t), color=INK, ls="--", lw=1.5, label=r"teoría $N\to\infty$")
-    ts = t[t < 0.45]
-    ax.plot(ts, 1 - np.pi**2 / 3 * ts**2, color=INK2, ls="-.", lw=1.1, label=r"Sommerfeld: $1-\frac{\pi^2}{3}(T/E_F)^2$")
     for k, N in enumerate(n_values):
         c = RAMP["fermions"][k]
         EF = float(an.fermi_energy_semiclassical(N))
@@ -403,7 +412,8 @@ def fig_chemical_potential_fermions(rows: list[dict], curves: dict, n_values, ou
     ax.plot([], [], color=INK2, lw=1.1, label=r"Fermi–Dirac con $\langle N\rangle = N$ (niveles discretos)")
     ax.set(xlabel=r"$T/E_F$,  $E_F = (6N)^{1/3}\,\hbar\omega$",
            ylabel=r"$(\mu + \frac{3}{2}\hbar\omega)/E_F$",
-           title="Potencial químico de los fermiones (ajuste de Fermi–Dirac a la ocupación simulada)", xlim=(0, 2.6))
+           title="Potencial químico de los fermiones (ajuste de Fermi–Dirac a la ocupación simulada)", xlim=(0, 1.3),
+           ylim=(-2.2, 1.2))
     ax.legend(loc="lower left")
     fig.tight_layout()
     return save(fig, out_dir, "fig_chemical_potential_fermions")
