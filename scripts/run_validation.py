@@ -1,4 +1,4 @@
-"""Validación cuantitativa (rúbrica A2).
+"""Validación cuantitativa contra resultados exactos.
 
 Casos:
   V1. N = 1 (las dos estadísticas coinciden) contra ⟨E⟩ = 3/(e^β − 1) en la trampa infinita,
@@ -15,11 +15,11 @@ Uso:     python scripts/run_validation.py [--fast]
 
 from __future__ import annotations
 
-import _common  # noqa: F401  (configura sys.path)
+import _common
 import numpy as np
 
 from src import analytics as an
-from src.config import make_seed, output_dirs
+from src.config import BURN_FRACTION, make_seed, output_dirs
 from src.datastore import save_raw, write_table_csv
 from src.metropolis import run_mcmc_chain
 from src.model import build_state_catalog
@@ -32,13 +32,13 @@ N_SAMPLES = 20_000
 def _run(N, T, q_max, statistics, proposal, n_steps, seed):
     n_steps -= n_steps % N_SAMPLES
     res = run_mcmc_chain(
-        N, 1.0 / T, q_max, statistics, n_steps, n_steps // 10, n_steps // N_SAMPLES, seed, "ground", proposal
+        N, 1.0 / T, q_max, statistics, n_steps, int(BURN_FRACTION * n_steps), n_steps // N_SAMPLES, seed, "ground", proposal
     )
     obs = compute_observables(res["E_trace"], res["level_trace"], N)
     return res, obs
 
 
-def _row(case, res, obs, observable, sim, err, err_block, exact, tau):
+def _row(case, res, obs, observable, sim, err, exact, tau):
     m = res["metadata"]
     return {
         "caso": case,
@@ -52,7 +52,6 @@ def _row(case, res, obs, observable, sim, err, err_block, exact, tau):
         "observable": observable,
         "simulacion": sim,
         "sigma": err,
-        "sigma_bloques": err_block,
         "exacto": exact,
         "z": discrepancy_in_sigmas(sim, err, exact),
         "error_%": relative_error_percent(sim, exact),
@@ -78,7 +77,7 @@ def main(fast: bool = False) -> None:
             res, obs = _run(1, T, q, "bosons", proposal, int(steps * scale), make_seed(1, k, 0 if proposal == "state" else 1))
             exact = float(an.exact_single_particle_energy(1.0 / T))
             rows.append(_row("V1 N=1 analitico", res, obs, "E/N", obs["energy_per_particle"],
-                             obs["energy_per_particle_err"], obs["energy_per_particle_err_blocking"], exact,
+                             obs["energy_per_particle_err"], exact,
                              obs["tau_int_energy"]))
             E.append(obs["energy_per_particle"])
             dE.append(obs["energy_per_particle_err"])
@@ -101,10 +100,10 @@ def main(fast: bool = False) -> None:
             ex = an.exact_canonical_enumeration(3, energies, 1.0 / T, stat)
             occ_exact = np.array([ex["occupation_per_state"][energies == l].mean() for l in range(q3 + 1)])
             rows.append(_row("V2 N=3 enumeracion", res, obs, "E/N", obs["energy_per_particle"],
-                             obs["energy_per_particle_err"], obs["energy_per_particle_err_blocking"],
+                             obs["energy_per_particle_err"],
                              ex["mean_energy"] / 3, obs["tau_int_energy"]))
             rows.append(_row("V2 N=3 enumeracion", res, obs, "<n_0>/N", obs["condensate_fraction"],
-                             obs["condensate_fraction_err"], obs["condensate_fraction_err_blocking"],
+                             obs["condensate_fraction_err"],
                              occ_exact[0] / 3, obs["tau_int_n0"]))
             # z por nivel sólo donde la población exacta g<n> es apreciable (≥ 0.01 partículas):
             # en niveles casi vacíos hay muy pocos eventos y τ_int no se puede estimar bien.
@@ -112,7 +111,7 @@ def main(fast: bool = False) -> None:
             z_levels = np.abs(obs["occupation"] - occ_exact)[populated] / obs["occupation_err"][populated]
             for l in np.nonzero(populated)[0]:
                 rows.append(_row("V2 N=3 enumeracion", res, obs, f"<n(eps={l})>", obs["occupation"][l],
-                                 obs["occupation_err"][l], float("nan"), occ_exact[l], float("nan")))
+                                 obs["occupation_err"][l], occ_exact[l], float("nan")))
             print(f"  {stat:8s} T={T:3.1f}  E/N={obs['energy_per_particle']:.4f} ± {obs['energy_per_particle_err']:.4f}"
                   f"  exacto={ex['mean_energy'] / 3:.4f}  z_E={rows[-2 - populated.sum()]['z']:.2f}"
                   f"  max z(n(eps))={z_levels.max():.2f} en {populated.sum()} niveles")
@@ -129,10 +128,10 @@ def main(fast: bool = False) -> None:
         for proposal, steps in (("state", 200_000_000), ("particle", 40_000_000)):
             res, obs = _run(10, 1.5, 12, stat, proposal, int(steps * scale), make_seed(3, s_code, 0 if proposal == "state" else 1))
             rows.append(_row("V3 nucleos N=10", res, obs, "E/N", obs["energy_per_particle"],
-                             obs["energy_per_particle_err"], obs["energy_per_particle_err_blocking"],
+                             obs["energy_per_particle_err"],
                              ex["energy_per_particle"], obs["tau_int_energy"]))
             rows.append(_row("V3 nucleos N=10", res, obs, "<n_0>/N", obs["condensate_fraction"],
-                             obs["condensate_fraction_err"], obs["condensate_fraction_err_blocking"],
+                             obs["condensate_fraction_err"],
                              ex["condensate_fraction"], obs["tau_int_n0"]))
             print(f"  {stat:8s} {proposal:8s} E/N={obs['energy_per_particle']:.4f} ± {obs['energy_per_particle_err']:.4f}"
                   f"  exacto={ex['energy_per_particle']:.4f}  z={rows[-2]['z']:.2f}"

@@ -1,0 +1,9 @@
+# Ejemplo de datos teóricos: E/N de 20 fermiones (canónico exacto, corte grande).
+# Columnas: T (unidades de hbar*omega/k_B), E/N (unidades de hbar*omega)
+T,E/N
+0.5,2.508665
+1.0,3.168833
+1.5,4.131131
+2.0,5.291747
+2.5,6.575654
+3.0,7.934427

@@ -25,10 +25,8 @@ from __future__ import annotations
 from itertools import combinations, combinations_with_replacement
 
 import numpy as np
-from scipy.integrate import quad
 from scipy.optimize import brentq
 from scipy.special import expit, gammaln, zeta
-from scipy.special import gamma as gamma_fn
 
 from .model import STATISTICS, fermi_level, ground_state_energy, level_degeneracy, number_of_states
 
@@ -337,64 +335,6 @@ def ground_state_energy_per_particle(N: int, statistics: str) -> float:
 def fermi_energy_semiclassical(N):
     """E_F ≈ (6N)^{1/3} ħω (aproximación continua, N ≫ 1)."""
     return (6.0 * np.asarray(N, dtype=float)) ** (1.0 / 3.0)
-
-
-# ---------------------------------------------------------------------------
-# 6. Límite termodinámico semiclásico (para comparar con experimentos, N ~ 10⁴–10⁶)
-# ---------------------------------------------------------------------------
-# Densidad de estados de la trampa g(ε) = ε²/[2(ħω̄)³], con ω̄ la media geométrica de las
-# frecuencias. Así los resultados valen también en trampas anisótropas.
-def fermi_dirac_integral(j: float, eta: float) -> float:
-    """F_j(η) = ∫₀^∞ x^j / (e^{x-η} + 1) dx."""
-    def f(x):
-        return x**j * expit(eta - x)
-
-    a = max(eta, 0.0)
-    head = quad(f, 0.0, a, limit=200)[0] if a > 0 else 0.0
-    return head + quad(f, a, np.inf, limit=200)[0]
-
-
-def bose_einstein_function(n: float, z: float) -> float:
-    """g_n(z) = Σ_k z^k / k^n para 0 < z ≤ 1 (polilogaritmo)."""
-    if z >= 1.0:
-        return float(zeta(n))
-    integrand = lambda x: x ** (n - 1) * z * np.exp(-x) / (1.0 - z * np.exp(-x))  # noqa: E731
-    return quad(integrand, 0.0, np.inf, limit=200)[0] / float(gamma_fn(n))
-
-
-def fermi_excess_energy_thermodynamic(t):
-    """Exceso de energía δU/U_cl = U/(3NkT) − 1 del gas de Fermi ideal en trampa, t = T/T_F.
-
-    k_B T_F = ħω̄ (6N)^{1/3}. Con η = μ/k_BT: N fija F_2(η) = 1/(3t³) y U/(3NkT) = F_3(η) / [3 F_2(η)].
-    Es la curva teórica de DeMarco y Jin (1999), Fig. 4.
-    """
-    t = np.atleast_1d(np.asarray(t, dtype=float))
-    out = np.empty_like(t)
-    for k, tk in enumerate(t):
-        target = 1.0 / (3.0 * tk**3)
-        eta = brentq(lambda e: fermi_dirac_integral(2, e) - target, -60.0, 1.0 / tk + 20.0, xtol=1e-12)
-        out[k] = fermi_dirac_integral(3, eta) / (3.0 * fermi_dirac_integral(2, eta)) - 1.0
-    return out
-
-
-def bose_release_energy_thermodynamic(t):
-    """Energía cinética (de liberación) por partícula del gas de Bose ideal, en unidades de k_B T_0.
-
-    t = T/T_0 con k_B T_0 = ħω̄ (N/ζ(3))^{1/3}. Por el teorema del virial la energía cinética es
-    la mitad de la total: E_cin/(N k T_0) = (3/2) t⁴ g_4(z)/ζ(3), con g_3(z) = ζ(3)/t³ si t > 1
-    y z = 1 (condensado) si t ≤ 1. A T alta tiende a la recta clásica (3/2) t.
-    """
-    t = np.atleast_1d(np.asarray(t, dtype=float))
-    out = np.empty_like(t)
-    for k, tk in enumerate(t):
-        if tk <= 1.0:
-            z = 1.0
-        else:
-            target = ZETA3 / tk**3
-            s = brentq(lambda s: bose_einstein_function(3, np.exp(-np.exp(s))) - target, -30.0, 5.0, xtol=1e-12)
-            z = float(np.exp(-np.exp(s)))
-        out[k] = 1.5 * tk**4 * bose_einstein_function(4, z) / ZETA3
-    return out
 
 
 def _check(statistics: str) -> None:

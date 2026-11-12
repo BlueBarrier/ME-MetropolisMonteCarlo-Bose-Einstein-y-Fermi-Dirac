@@ -1,36 +1,34 @@
-"""Regenera todas las figuras y tablas del reporte a partir de data/raw (sin volver a simular).
+"""Regenera todas las figuras (PNG en fig/) y tablas a partir de data/raw, sin volver a simular,
+y al terminar abre una ventana para verlas una por una (cierre la ventana para salir).
 
-Figuras (PDF + PNG en figures/):
-  fig_validation           ← run_validation.py
-  fig_equilibration        ← run_equilibration.py
-  fig_autocorrelation      ← run_equilibration.py
-  fig_qmax_convergence     ← run_sweeps.py (parte A)
-  fig_energy_vs_T          ← run_sweeps.py (parte B)
-  fig_condensate_fraction  ← run_sweeps.py (parte B)
-  fig_occupations          ← run_sweeps.py (parte B)
-  fig_ensemble_comparison  ← run_sweeps.py (partes B y C)
-  fig_z_scores             ← run_sweeps.py (parte B)
-  fig_experimental_comparison ← compare_experiments.py (datos de data/external/)
-Tablas: figures/tabla_validacion.tex, figures/tabla_resultados.csv, figures/tabla_resultados.tex
+Figuras en fig/ (nombre interno para --only → archivo):
+  fig_validation              → 01_validacion_contra_resultados_exactos.png        (run_validation.py)
+  fig_equilibration           → 02_equilibracion_desde_dos_estados_iniciales.png   (run_equilibration.py)
+  fig_autocorrelation         → 03_autocorrelacion_de_la_energia.png               (run_equilibration.py)
+  fig_qmax_convergence        → 04_convergencia_en_el_corte_energetico_qmax.png    (run_sweeps.py, parte A)
+  fig_energy_vs_T             → 05_energia_por_particula_vs_temperatura.png        (run_sweeps.py, parte B)
+  fig_condensate_fraction     → 06_fraccion_de_condensado_bosones_vs_T.png         (run_sweeps.py, parte B)
+  fig_occupations             → 07_ocupaciones_bosones_vs_fermiones_N45.png        (run_sweeps.py, parte C)
+  fig_ensemble_comparison     → 08_energia_canonico_vs_gran_canonico_BE_FD.png     (run_sweeps.py, parte B)
+Tablas en data/tablas/: tabla_validacion.tex, tabla_resultados.csv, tabla_resultados.tex
 
-Uso: python scripts/plot_results.py [--fast] [--only NOMBRE]
+Uso: python scripts/plot_results.py [--fast] [--only NOMBRE] [--no-show]
 """
 
 from __future__ import annotations
 
-import _common  # noqa: F401
+import _common  
 import matplotlib
 
 matplotlib.use("Agg")
-import numpy as np  # noqa: E402
+import numpy as np  
 
-from src import analytics as an  # noqa: E402
-from src import plotting as pl  # noqa: E402
-from src.config import N_VALUES, output_dirs  # noqa: E402
-from src.datastore import load_raw, read_table_csv, save_raw, write_table_csv  # noqa: E402
+from src import analytics as an  
+from src import plotting as pl  
+from src.config import N_VALUES, output_dirs, table_dir  
+from src.datastore import load_raw, read_table_csv, save_raw, write_table_csv
+from src.viewer import show_gallery  
 
-OCC_N = 35
-OCC_TEMPS = (0.5, 2.0, 4.0)
 
 
 def exact_curves(raw_dir, n_values) -> dict:
@@ -40,7 +38,7 @@ def exact_curves(raw_dir, n_values) -> dict:
         arrays, meta = load_raw(path)
         if meta.get("n_values") == list(n_values):
             return arrays
-    print("Calculando curvas exactas (se guardan en data/raw/exact_curves.npz)...")
+    print("Calculando curvas exactas (guardadas en data/raw/exact_curves.npz)...")
     out = {}
     T_dense = np.concatenate([np.linspace(0.12, 1.0, 23), np.linspace(1.05, 5.2, 42)])
     for stat in ("bosons", "fermions"):
@@ -68,6 +66,7 @@ def _sig(x: float, err: float) -> str:
 
 
 def tables(val_rows, rows, fig_dir) -> None:
+    fig_dir.mkdir(parents=True, exist_ok=True)
     lines = [r"\begin{tabular}{llrrrlrr}", r"\hline",
              r"Caso & Núcleo & $N$ & $T$ & $q_{max}$ & Observable & Simulación & $z$ \\", r"\hline"]
     for r in val_rows:
@@ -99,7 +98,7 @@ def tables(val_rows, rows, fig_dir) -> None:
     (fig_dir / "tabla_resultados.tex").write_text("\n".join(lines), encoding="utf-8")
 
 
-def main(fast: bool = False, only: str | None = None) -> None:
+def main(fast: bool = False, only: str | None = None, show: bool = True) -> list:
     raw_dir, fig_dir = output_dirs(fast)
     pl.apply_style()
     made = []
@@ -126,36 +125,31 @@ def main(fast: bool = False, only: str | None = None) -> None:
     if (raw_dir / "sweep_summary.csv").exists():
         rows = read_table_csv(raw_dir / "sweep_summary.csv")
         curves = exact_curves(raw_dir, N_VALUES)
-        scaling = load_raw(raw_dir / "ensemble_scaling.npz")[0] if (raw_dir / "ensemble_scaling.npz").exists() else None
         if want("fig_energy_vs_T"):
             made += pl.fig_energy_vs_T(rows, curves, N_VALUES, fig_dir)
         if want("fig_condensate_fraction"):
             made += pl.fig_condensate_fraction(rows, curves, N_VALUES, fig_dir)
         if want("fig_ensemble_comparison"):
-            made += pl.fig_ensemble_comparison(rows, curves, scaling, N_VALUES, fig_dir)
-        if want("fig_z_scores"):
-            made += pl.fig_z_scores(rows, fig_dir)
-        if want("fig_occupations"):
-            runs = {}
-            for stat in ("bosons", "fermions"):
-                for T in OCC_TEMPS:
-                    arr, meta = load_raw(raw_dir / "sweep" / f"{stat}_N{OCC_N}_T{T:.2f}.npz")
-                    runs[(stat, T)] = (arr, meta["summary"])
-            made += pl.fig_occupations(runs, OCC_N, OCC_TEMPS, fig_dir)
-        if (raw_dir / "experimental_comparison.npz").exists() and want("fig_experimental_comparison"):
-            cmp, _ = load_raw(raw_dir / "experimental_comparison.npz")
-            made += pl.fig_experimental_comparison(cmp, N_VALUES, fig_dir)
+            made += pl.fig_ensemble_comparison(rows, curves, N_VALUES, fig_dir)
+        if (raw_dir / "occupations.npz").exists() and want("fig_occupations"):
+            occ, _ = load_raw(raw_dir / "occupations.npz")
+            made += pl.fig_occupations(occ, fig_dir)
         if only is None:
-            tables(val_rows, rows, fig_dir)
-            made += [fig_dir / "tabla_validacion.tex", fig_dir / "tabla_resultados.csv", fig_dir / "tabla_resultados.tex"]
+            tdir = table_dir(fast)
+            tables(val_rows, rows, tdir)
+            print(f"Tablas en {tdir}")
+    made = sorted(made)  # orden de lectura: 01, 02, ...
     for p in made:
-        print(f"  {p.relative_to(fig_dir.parents[1] if fast else fig_dir.parent)}")
-    print(f"{len(made)} archivos generados en {fig_dir}")
+        print(f"  {p.name}")
+    print(f"{len(made)} figuras PNG guardadas en {fig_dir}")
+    if show:
+        show_gallery(made)
     return made
 
 
 if __name__ == "__main__":
     parser = _common.base_parser(__doc__.splitlines()[0])
     parser.add_argument("--only", default=None, help="Nombre de una sola figura, p. ej. fig_validation")
+    parser.add_argument("--no-show", action="store_true", help="No abrir la ventana de visualización")
     args = parser.parse_args()
-    main(fast=args.fast, only=args.only)
+    main(fast=args.fast, only=args.only, show=not args.no_show)

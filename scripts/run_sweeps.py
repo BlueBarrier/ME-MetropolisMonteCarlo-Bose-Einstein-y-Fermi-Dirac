@@ -1,4 +1,4 @@
-"""Estudio principal: barridos en q_max, T y N (rúbrica A3 de tamaño finito y requisito 4.1.6).
+"""Estudio principal: barridos en q_max, T y N, y ocupaciones por nivel.
 
 Parte A, convergencia en el corte q_max a N y T fijos: separa el error de
   truncamiento (exacto(q_max) − exacto(q→∞)) del error estadístico
@@ -8,19 +8,19 @@ Parte B, barrido en T para N ∈ {10, 20, 35, 56} y las dos estadísticas, con e
   (i) la solución canónica exacta, que es la validación, y
   (ii) el ensemble gran canónico (Bose–Einstein o Fermi–Dirac con μ fijado por N),
   que es la comparación entre ensembles.
-Parte C, escalamiento con N de la diferencia canónico − gran canónico en E/N a
-  T/T_ref fija (exponente de tamaño finito).
+Parte C, ocupación media por estado ⟨n(ε)⟩ con N = 45 a T = 0.5, 2 y 4 para las dos
+  estadísticas, junto con la solución canónica exacta y la gran canónica (BE/FD).
 
 Salidas: data/raw/qmax_convergence.npz, data/raw/sweep/<estadística>_N<N>_T<T>.npz,
-         data/raw/sweep_summary.csv, data/raw/ensemble_scaling.npz
-Uso:     python scripts/run_sweeps.py [--fast] [--resume] [--only {qmax,temperature,scaling}]
+         data/raw/sweep_summary.csv, data/raw/occupations.npz
+Uso:     python scripts/run_sweeps.py [--fast] [--resume] [--only {qmax,temperature,occupations}]
 """
 
 from __future__ import annotations
 
 import time
 
-import _common  # noqa: F401
+import _common
 import numpy as np
 
 from src import analytics as an
@@ -114,10 +114,9 @@ def temperature_sweep(raw_dir, fast: bool, resume: bool) -> None:
                     "q_max": q, "M": m["M"], "semilla": seed, "pasos": steps,
                     "intervalo": m["sample_interval"], "aceptacion": m["acceptance_rate"],
                     "E_N": obs["energy_per_particle"], "E_N_err": obs["energy_per_particle_err"],
-                    "E_N_err_bloques": obs["energy_per_particle_err_blocking"],
                     "tau_E": obs["tau_int_energy"],
                     "f0": obs["condensate_fraction"], "f0_err": obs["condensate_fraction_err"],
-                    "f0_err_bloques": obs["condensate_fraction_err_blocking"], "tau_n0": obs["tau_int_n0"],
+                    "tau_n0": obs["tau_int_n0"],
                     "E_N_exacto": ex["energy_per_particle"], "f0_exacto": ex["condensate_fraction"],
                     "E_N_exacto_qinf": ex_inf["energy_per_particle"],
                     "f0_exacto_qinf": ex_inf["condensate_fraction"],
@@ -155,67 +154,32 @@ def temperature_sweep(raw_dir, fast: bool, resume: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-def _power_law_fit(N, y, dy):
-    """Ajuste ponderado log|y| = a + b log N. Devuelve (b, σ_b)."""
-    x, ly = np.log(N), np.log(np.abs(y))
-    w = np.abs(y) / dy  # 1/σ(log|y|)
-    coef, cov = np.polyfit(x, ly, 1, w=w, cov="unscaled")
-    return float(coef[0]), float(np.sqrt(cov[0, 0]))
+OCC_N = 45
+OCC_TEMPS = (0.5, 2.0, 4.0)
 
 
-def ensemble_scaling(raw_dir, fast: bool) -> None:
-    """Parte C: (E_can − E_gc)/E_gc a T/T_ref fija y varios N, para estimar el exponente."""
-    print("Parte C: escalamiento de la diferencia canónico − gran canónico")
-    arrays, meta = {}, {}
+def occupations(raw_dir, fast: bool) -> None:
+    """Parte C: ⟨n(ε)⟩ por estado con N = 45 (simulación, canónico exacto y gran canónico)."""
+    print(f"Parte C: ocupaciones con N = {OCC_N}")
+    arrays = {"N": OCC_N, "temperatures": OCC_TEMPS}
+    meta = {"N": OCC_N, "runs": {}}
     for stat in ("bosons", "fermions"):
-        t = SCALING_T[stat]
-        d, dd, d_ex, Ts, qs, seeds = [], [], [], [], [], []
-        for k, N in enumerate(SCALING_N):
-            T = t * reference_temperature(N, stat)
-            q = an.choose_q_max(N, T, stat, Q_TOL)
-            seed = make_seed(40, STAT_CODE[stat], N)
-            res, obs = run_point(N, T, q, stat, SCALING_STEPS_FACTOR[stat] * steps_for(N, T, stat, fast), seed)
-            ex = an.exact_canonical(N, q, 1.0 / T, stat)["energy_per_particle"]
-            gc = an.grand_canonical_observables(N, q, 1.0 / T, stat)["energy_per_particle"]
-            d.append((obs["energy_per_particle"] - gc) / gc)
-            dd.append(obs["energy_per_particle_err"] / gc)
-            d_ex.append((ex - gc) / gc)
-            Ts.append(T); qs.append(q); seeds.append(seed)
-            print(f"  {stat:8s} N={N:3d} T={T:.3f} q={q:3d}  sim: dE/E={d[-1]:+.5f} ± {dd[-1]:.5f}"
-                  f"  exacto: {d_ex[-1]:+.5f}  z={discrepancy_in_sigmas(obs['energy_per_particle'], obs['energy_per_particle_err'], ex):.2f}")
-        b, db = _power_law_fit(np.array(SCALING_N), np.array(d), np.array(dd))
-        # Comparación justa: el mismo ajuste (mismos N y mismos pesos) aplicado a los valores exactos.
-        # Con N pequeño la pendiente local todavía cambia (régimen preasintótico).
-        b_same, _ = _power_law_fit(np.array(SCALING_N), np.array(d_ex), np.array(dd))
-        N_dense = np.array(SCALING_DENSE[stat])
-        delta_dense = []
-        for N in N_dense:
-            T = t * reference_temperature(int(N), stat)
-            q = an.reference_cutoff(int(N), T, stat)
-            ex = an.exact_canonical(int(N), q, 1.0 / T, stat)["energy_per_particle"]
-            gc = an.grand_canonical_observables(int(N), q, 1.0 / T, stat)["energy_per_particle"]
-            delta_dense.append((ex - gc) / gc)
-        delta_dense = np.array(delta_dense)
-        b_ex, _ = _power_law_fit(N_dense, delta_dense, 1e-3 * np.abs(delta_dense))
-        print(f"  {stat}: exponente simulación b = {b:.3f} ± {db:.3f} (z = {abs(b - b_same) / db:.2f});"
-              f"  exacto con el mismo ajuste b = {b_same:.3f};  exacto N={N_dense[0]}–{N_dense[-1]} b = {b_ex:.3f}")
-        arrays.update({
-            f"{stat}_N": np.array(SCALING_N), f"{stat}_T": np.array(Ts), f"{stat}_q": np.array(qs),
-            f"{stat}_delta": np.array(d), f"{stat}_delta_err": np.array(dd), f"{stat}_delta_exact": np.array(d_ex),
-            f"{stat}_slope": np.array(b), f"{stat}_slope_err": np.array(db), f"{stat}_slope_exact": np.array(b_ex),
-            f"{stat}_slope_exact_same": np.array(b_same),
-            f"{stat}_N_dense": N_dense, f"{stat}_delta_dense": delta_dense, f"{stat}_t": np.array(t),
-        })
-        meta[stat] = {"t": t, "seeds": seeds}
-    save_raw(raw_dir / "ensemble_scaling.npz", arrays, meta)
-
-
-SCALING_N = (10, 20, 35, 56, 84)
-SCALING_T = {"bosons": 0.5, "fermions": 0.25}  # T/T_c y T/T_F
-# Señal pequeña (~1/N): corridas más largas que en el barrido para resolverla.
-SCALING_STEPS_FACTOR = {"bosons": 4, "fermions": 2}
-SCALING_DENSE = {"bosons": (10, 14, 20, 28, 35, 45, 56, 70, 84, 100, 120),
-                 "fermions": (10, 20, 35, 56, 84, 120, 165, 220)}
+        arrays[f"{stat}_T_ref"] = reference_temperature(OCC_N, stat)
+        for k, T in enumerate(OCC_TEMPS):
+            q = an.choose_q_max(OCC_N, T, stat, Q_TOL)
+            seed = make_seed(60, STAT_CODE[stat], k)
+            res, obs = run_point(OCC_N, T, q, stat, steps_for(OCC_N, T, stat, fast), seed)
+            ex = an.exact_canonical(OCC_N, q, 1.0 / T, stat)
+            gc = an.grand_canonical_observables(OCC_N, q, 1.0 / T, stat)
+            key = f"{stat}_T{T:.2f}"
+            arrays.update({f"{key}_levels": obs["levels"], f"{key}_sim": obs["occupation"],
+                           f"{key}_sim_err": obs["occupation_err"], f"{key}_exact": ex["occupation"],
+                           f"{key}_gc": gc["occupation"]})
+            meta["runs"][key] = {"q_max": q, "seed": seed, "steps": res["metadata"]["n_steps"],
+                                 "E_N": obs["energy_per_particle"], "E_N_exacto": ex["energy_per_particle"]}
+            print(f"  {stat:8s} T={T:4.2f} q={q:3d}  E/N={obs['energy_per_particle']:.4f}"
+                  f"±{obs['energy_per_particle_err']:.4f} (exacto {ex['energy_per_particle']:.4f}), semilla {seed}")
+    save_raw(raw_dir / "occupations.npz", arrays, meta)
 
 
 def main(fast: bool = False, resume: bool = False, only: str | None = None) -> None:
@@ -224,13 +188,13 @@ def main(fast: bool = False, resume: bool = False, only: str | None = None) -> N
         qmax_convergence(raw_dir, fast)
     if only in (None, "temperature"):
         temperature_sweep(raw_dir, fast, resume)
-    if only in (None, "scaling"):
-        ensemble_scaling(raw_dir, fast)
+    if only in (None, "occupations"):
+        occupations(raw_dir, fast)
 
 
 if __name__ == "__main__":
     parser = _common.base_parser(__doc__.splitlines()[0])
     parser.add_argument("--resume", action="store_true", help="No repetir corridas cuyo archivo ya existe.")
-    parser.add_argument("--only", choices=("qmax", "temperature", "scaling"), default=None)
+    parser.add_argument("--only", choices=("qmax", "temperature", "occupations"), default=None)
     args = parser.parse_args()
     main(fast=args.fast, resume=args.resume, only=args.only)

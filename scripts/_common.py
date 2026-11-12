@@ -22,7 +22,7 @@ def base_parser(description: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
         "--fast", action="store_true",
-        help="Corridas cortas (5 %% de los pasos) en data/raw_fast y figures/fast, sólo para verificar.",
+        help="Corridas cortas (5 %% de los pasos) en data/raw_fast y fig/fast, sólo para verificar.",
     )
     return parser
 

@@ -1,0 +1,12 @@
+# Ejemplo de datos teóricos: ocupación por estado de 20 bosones a T = 1 (canónico exacto).
+# Columnas: nivel epsilon (entero), <n(epsilon)> por estado
+epsilon,n
+0,1.623913e+01
+1,5.819678e-01
+2,1.565170e-01
+3,5.239554e-02
+4,1.865731e-02
+5,6.783637e-03
+6,2.484905e-03
+7,9.127118e-04
+8,3.355743e-04

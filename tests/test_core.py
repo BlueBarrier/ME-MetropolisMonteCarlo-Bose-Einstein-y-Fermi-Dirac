@@ -9,7 +9,6 @@ from src import analytics as an
 from src import model
 from src.metropolis import metropolis_hastings_step, metropolis_step, particle_labels, run_mcmc_chain
 from src.stats import (
-    blocking_analysis,
     discrepancy_in_sigmas,
     integrated_autocorrelation_time,
     statistical_uncertainty,
@@ -179,8 +178,6 @@ def test_autocorrelation_time_of_ar1_process():
         x[t] = phi * x[t - 1] + noise[t]
     tau = integrated_autocorrelation_time(x)
     assert abs(tau - 4.5) / 4.5 < 0.1
-    _, _, err = statistical_uncertainty(x)
-    assert abs(blocking_analysis(x)["plateau_error"] / err - 1.0) < 0.3
 
 
 def test_discrepancy_edge_cases():
@@ -194,26 +191,14 @@ def test_discrepancy_edge_cases():
     assert err == pytest.approx(3 / 56 / 20_000)
 
 
-# ---------------------------------------------------------------- límite termodinámico
-def test_thermodynamic_limit_curves():
-    """Límites conocidos de las curvas usadas para comparar con los experimentos."""
-    # Fermi: T → 0 da U = (3/4) N k T_F, o sea δU/U_cl → 1/(4t) − 1; T alta da δ → 0.
-    t = 0.02
-    assert an.fermi_excess_energy_thermodynamic(t)[0] == pytest.approx(1 / (4 * t) - 1, rel=1e-2)
-    assert abs(an.fermi_excess_energy_thermodynamic(20.0)[0]) < 1e-3
-    # Bose: E_cin/(N k T_0) = (3/2) ζ(4)/ζ(3) t⁴ por debajo de T_0; recta clásica (3/2)t a T alta.
-    assert an.bose_release_energy_thermodynamic(0.5)[0] == pytest.approx(1.5 * 1.0823232337 / an.ZETA3 * 0.5**4, rel=1e-8)
-    assert an.bose_release_energy_thermodynamic(20.0)[0] == pytest.approx(30.0, rel=2e-3)
-    # g_n(z) por integral vs serie
-    z = 0.6
-    assert an.bose_einstein_function(3, z) == pytest.approx(sum(z**k / k**3 for k in range(1, 400)), rel=1e-10)
+# ---------------------------------------------------------------- comparación con teoría del usuario
+def test_theory_comparison_against_exact_values():
+    """Si la "teoría" del usuario es la solución exacta con el mismo q_max, la simulación es compatible."""
+    from src.theory_compare import compare_with_theory, parse_pairs
 
-
-def test_semiclassical_limit_of_exact_fermi_energy():
-    """Con N grande, la solución canónica exacta (con punto cero) se acerca a la curva semiclásica."""
-    N, t = 120, 0.6  # capa cerrada (ε_F = 7)
-    TF = (6 * N) ** (1 / 3)
-    T = t * TF
-    E = an.exact_canonical(N, an.reference_cutoff(N, T, "fermions"), 1 / T, "fermions")["energy_per_particle"]
-    delta = (E + 1.5 - 3 * T) / (3 * T)
-    assert delta == pytest.approx(an.fermi_excess_energy_thermodynamic(t)[0], abs=5e-3)
+    x, y = parse_pairs("# T E/N\n1.0, 0 ; 2.0 0")  # admite comentarios, comas, espacios y ';'
+    assert list(x) == [1.0, 2.0]
+    theory = [an.exact_canonical(10, 12, 1 / T, "fermions")["energy_per_particle"] for T in x]
+    res = compare_with_theory("fermions", 10, 12, "energy", x, theory, n_steps=2_000_000, seed=5, verbose=False)
+    assert np.all(np.abs(res["z"]) < 3.5)
+    assert res["seeds"] == [5, 6]

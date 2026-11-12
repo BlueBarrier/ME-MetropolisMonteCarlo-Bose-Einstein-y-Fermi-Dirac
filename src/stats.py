@@ -7,7 +7,6 @@ que el error estándar ingenuo σ_A/√N subestima la incertidumbre. Aquí se us
     C(t) = [⟨A_k A_{k+t}⟩ - ⟨A⟩²] / σ²_A,
 
 con la suma cortada por una ventana automática (Sokal) o en el primer C(t) ≤ 0.
-El método de bloques (Flyvbjerg–Petersen) sirve como estimación independiente.
 """
 
 from __future__ import annotations
@@ -86,45 +85,6 @@ def statistical_uncertainty(
     tau = integrated_autocorrelation_time(x, method=method)
     var = float(x.var(ddof=1))
     return mean, tau, float(np.sqrt(2.0 * tau * var / n))
-
-
-def blocking_error(series: np.ndarray, n_blocks: int = 32) -> float:
-    """Error del promedio a partir de la dispersión de ``n_blocks`` promedios de bloque."""
-    x = np.asarray(series, dtype=float)
-    size = x.size // n_blocks
-    if size < 1:
-        raise ValueError("Serie demasiado corta para ese número de bloques.")
-    means = x[: size * n_blocks].reshape(n_blocks, size).mean(axis=1)
-    return float(means.std(ddof=1) / np.sqrt(n_blocks))
-
-
-def blocking_analysis(series: np.ndarray, min_blocks: int = 32) -> dict:
-    """Método de Flyvbjerg–Petersen: se promedian pares sucesivos y se recalcula el error.
-
-    El error crece con el tamaño de bloque hasta que los bloques quedan descorrelacionados
-    y entonces forma una meseta. Como estimación conservadora se toma el máximo entre
-    los niveles con al menos ``min_blocks`` bloques.
-    """
-    x = np.asarray(series, dtype=float).copy()
-    sizes, errors, d_errors = [], [], []
-    size = 1
-    while x.size >= min_blocks:
-        n = x.size
-        err = np.sqrt(x.var(ddof=1) / n) if n > 1 else 0.0
-        sizes.append(size)
-        errors.append(err)
-        d_errors.append(err / np.sqrt(2.0 * (n - 1)))
-        if n % 2:
-            x = x[:-1]
-        x = 0.5 * (x[0::2] + x[1::2])
-        size *= 2
-    errors = np.array(errors)
-    return {
-        "block_sizes": np.array(sizes),
-        "errors": errors,
-        "error_of_errors": np.array(d_errors),
-        "plateau_error": float(errors.max()) if errors.size else float("nan"),
-    }
 
 
 def discrepancy_in_sigmas(sim_mean: float, sim_err: float, exact_val: float) -> float:

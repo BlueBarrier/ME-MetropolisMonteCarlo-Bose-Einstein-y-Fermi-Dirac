@@ -25,6 +25,7 @@ import _common
 import numpy as np
 
 from src import analytics as an
+from src.config import BURN_FRACTION
 from src.datastore import FIG_DIR, RAW_DIR, save_raw
 from src.metropolis import run_mcmc_chain
 from src.model import (
@@ -114,7 +115,7 @@ def run(args: argparse.Namespace) -> dict:
 
     print(f"\nCorriendo: {stat}, N = {N}, T = {T:.4g} ħω/k_B, q_max = {q}, núcleo = {args.proposal}, "
           f"pasos = {steps:.2e}, semilla = {seed}")
-    res = run_mcmc_chain(N, 1.0 / T, q, stat, steps, steps // 10, steps // 20_000, seed, args.init, args.proposal)
+    res = run_mcmc_chain(N, 1.0 / T, q, stat, steps, int(BURN_FRACTION * steps), steps // 20_000, seed, args.init, args.proposal)
     obs = compute_observables(res["E_trace"], res["level_trace"], N)
     ex = an.exact_canonical(N, q, 1.0 / T, stat)
     gc = an.grand_canonical_observables(N, q, 1.0 / T, stat)
@@ -136,8 +137,7 @@ def run(args: argparse.Namespace) -> dict:
            f"ε_F = {an.fermi_energy(N)} ħω ({'capa cerrada' if is_closed_shell(N) else 'capa abierta'}),  T/T_F = {T / an.fermi_energy(N):.3f}")
     print(f"\nEscala de temperatura: {ref}")
     print(f"Potencial químico gran canónico: μ = {gc['mu']:.5g} ħω")
-    print(f"τ_int(E) = {obs['tau_int_energy']:.2f} mediciones,  τ_int(n_0) = {obs['tau_int_n0']:.2f};"
-          f"  error de E/N por bloques = {obs['energy_per_particle_err_blocking']:.3g}")
+    print(f"τ_int(E) = {obs['tau_int_energy']:.2f} mediciones,  τ_int(n_0) = {obs['tau_int_n0']:.2f}")
     print(f"Aceptación = {m['acceptance_rate']:.3%},  tiempo = {m['elapsed_seconds']:.1f} s,  semilla = {seed}")
     tau_max = max(obs["tau_int_energy"], obs["tau_int_n0"])
     if tau_max > obs["n_samples"] / 50:
@@ -202,7 +202,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--init", choices=("ground", "excited"), default="ground")
     parser.add_argument("--save", action="store_true", help="Guardar datos crudos en data/raw/cli/")
-    parser.add_argument("--plot", action="store_true", help="Guardar figura en figures/cli/ (implica --save)")
+    parser.add_argument("--plot", action="store_true", help="Guardar figura PNG en fig/cli/ (implica --save)")
     args = parser.parse_args()
     if args.statistics is None:
         args = interactive_params()

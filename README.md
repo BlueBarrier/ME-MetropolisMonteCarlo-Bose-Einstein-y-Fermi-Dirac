@@ -2,30 +2,32 @@
 
 Proyecto final de **Mecánica Estadística** (Universidad del Valle de Guatemala).
 
-Simulación de gases ideales de **bosones** y **fermiones** (una componente de espín) en una
-trampa armónica isotrópica 3D, en el **ensemble canónico** ($N$, $T$, $\omega$ fijos), con
-**Markov Chain Monte Carlo de Metropolis** sobre configuraciones de ocupación. Se valida contra
-resultados exactos y se estudia cómo las restricciones de ocupación producen la acumulación
-de bosones en el estado fundamental y el llenado del mar de Fermi, en función de $T$ y $N$.
-También se comparan los resultados con las distribuciones de Bose–Einstein y Fermi–Dirac
-del ensemble gran canónico.
+Simulación de gases ideales de **bosones** y **fermiones** (una componente de espín) en una trampa armónica isotrópica 3D, en el **ensemble canónico** ($N$, $T$, $\omega$ fijos), con **Algoritmo de Metrópolis de Monte Carlo** sobre configuraciones de ocupación. Se valida contra resultados exactos y se estudia cómo la antisimetría de la función de onda produce el llenado del mar de Fermi y la simetría de la función de onda produce la acumulación de los estados en la energía base para el condensado de Bose-Einstein, en función de $T$ y $N$.
+
+También se comparan los resultados con las distribuciones de Bose–Einstein y Fermi–Dirac del ensemble gran canónico.
+
+---
 
 **Integrantes:** Isabella Ramírez, Erick Barrera, José Dávila.
 
 ---
 
-## Modelo en una línea
+## Modelo Físico
 
 $$
-H(\mathbf n)=\sum_i n_i\,\varepsilon_i,\quad \varepsilon_i=\hbar\omega(q_x+q_y+q_z),\quad \sum_i n_i=N,\quad
-n_i\in\{0,\dots,N\}\ \text{(BE)},\ \{0,1\}\ \text{(FD)},\quad P(\mathbf n)\propto e^{-\beta H(\mathbf n)}
+H(\mathbf n)=\sum_i n_i\,\varepsilon_i \quad \text{Hamiltoniano dada la energía y el núm. de partículas.}\\ 
+
+\varepsilon_i=\hbar\omega(q_x+q_y+q_z)\quad \text{Energía por nivel dado un número cuántico por eje.}\\\\ 
+n = q_x + q_y + q_z \quad \text{Número cuántico principal}\\\\
+
+\sum_i n_i=N \quad \text{Ligadura para ambas estadísticas (no se consideran fotones).}\\
+
+n_i\in\{0,\dots,N\}\ \text{(BE)},\ \{0,1\}\ \text{(FD)} \quad \text{Número de  ocupación por nivel.}\\\\ 
+
+P(\mathbf n)\propto e^{-\beta H(\mathbf n)} \quad \text{Probabilidad dado n}
 $$
 
-Unidades reducidas: **ħω = k_B = 1** (energía en ħω, temperatura en ħω/k_B). Las conversiones
-al SI están en `src/model.py` y la interfaz CLI acepta $T$ en kelvin y ω en rad/s.
-La teoría completa (balance detallado, ergodicidad, soluciones exactas) está en
-[docs/fundamentos.md](docs/fundamentos.md), y la revisión contra la rúbrica en
-[docs/revision_rubrica.md](docs/revision_rubrica.md).
+Con unidades reducidas: $\hslash \omega=k_b= 1$. Las conversiones al SI están en la interfaz CLI y acepta $T$ en kelvin y ω en rad/s. 
 
 ---
 
@@ -33,54 +35,91 @@ La teoría completa (balance detallado, ergodicidad, soluciones exactas) está e
 
 Requiere **Python 3.14** (probado con CPython 3.14.6 en Windows 11).
 
+Recomendamos crear un *virtual enviroment* para no tener conflictos con otras librearías en contar ya con python 3.14.6
+
 ```bash
 python -m venv .venv
 ```
+
+Para instalar las librerías necesarias solo se debe correr el archivo *requirements.txt*:
 
 ```bash
 # Windows:  .venv\Scripts\activate      Linux/macOS:  source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Dependencias con sus versiones ([requirements.txt](requirements.txt)): numpy 2.4.6, scipy 1.17.1,
-matplotlib 3.11.0, numba 0.65.1 (llvmlite 0.47.0), pillow 12.2.0 (GIF) y pytest 9.2.0.
-
 ## Ejecución
 
-| Qué | Comando | Tiempo aprox. |
-|---|---|---|
-| Todo: pruebas, datos, figuras, tablas y animación | `python scripts/run_all.py` (o `make all`) | 30–40 min |
-| Sólo figuras y tablas desde los datos crudos incluidos | `python scripts/run_all.py --plots-only` (o `make figures`) | ~1 min |
-| Verificación rápida de que todo corre | `python scripts/run_all.py --fast` | ~4 min |
-| Pruebas automatizadas | `python -m pytest` | ~20 s |
-| Reporte y diapositivas (LaTeX) | `make latex`, o `pdflatex` dos veces dentro de `reporte/` y de `presentacion/` | ~1 min |
-| Una simulación interactiva (CLI) | `python scripts/interactive_cli.py` | segundos |
+Todo se maneja desde un menú:
 
-`--fast` usa el 5 % de los pasos y escribe en `data/raw_fast/` y `figures/fast/`, así que no
-toca los datos del reporte. En Windows `make` no suele estar instalado: `run_all.py` es el
-equivalente multiplataforma del `Makefile`.
+```bash
+python scripts/run.py
+```
+
+| Opción | Qué hace | Script | Tiempo aprox. |
+|---|---|---|---|
+| 1 | Simulación individual (bosones o fermiones) con resumen de errores | `scripts/interactive_cli.py` | segundos |
+| 2 | Comparar datos teóricos propios con la simulación, con el q_max que elija el usuario | `scripts/compare_theory.py` | ~10 s por punto |
+| 3 | Validación contra resultados exactos | `scripts/run_validation.py` | ~3 min |
+| 4 | Equilibración, autocorrelación y verificación de n_burn en todo el barrido | `scripts/run_equilibration.py` | ~5 min |
+| 5 | Barridos en q_max, T y N, y ocupaciones con N = 45 | `scripts/run_sweeps.py` | ~20 min |
+| 6 | Generar las figuras (PNG en `fig/`) y verlas una por una | `scripts/plot_results.py` | ~30 s |
+| 7 | Ver las figuras ya guardadas | `scripts/view_figures.py` | — |
+| 8 | Animación de la relajación al equilibrio (GIF, N = 56) | `scripts/make_animation.py` | ~1 min |
+| 9 | Pruebas automatizadas | `python -m pytest` | ~15 s |
+| 10 | Reproducir todo (pruebas, 3, 4, 5, 8 y figuras) | — | 30–40 min |
+| r | Activar o desactivar el modo rápido (5 % de los pasos, en `data/raw_fast/` y `fig/fast/`) | — | — |
+
+Cada script también se puede correr por separado (por ejemplo `python scripts/plot_results.py --no-show`).
+
+### Comparar datos teóricos propios con la simulación
+
+`scripts/compare_theory.py` (opción 2 del menú) pide la estadística, N, el corte **q_max** y un
+observable, y los valores teóricos como pares (x, y), desde un CSV de dos columnas o escritos a mano:
+
+| Observable | x | y | Simulaciones |
+|---|---|---|---|
+| `energy` | T (ħω/k_B) | ⟨E⟩/N (ħω) | una por cada T |
+| `condensate` | T | f₀ = ⟨n₀⟩/N | una por cada T |
+| `occupation` | nivel ε (entero ≤ q_max) | ⟨n(ε)⟩ por estado | una, a la T que se indique |
+
+Corre la simulación con ese q_max e imprime, para cada punto, la teoría, la simulación ± σ, la
+discrepancia z = (sim − teo)/σ, el error porcentual y el error de truncamiento estimado por usar ese
+q_max. Guarda la tabla en `data/raw/comparaciones/` y la figura (teoría frente a simulación, con
+residuos z) en `fig/comparaciones/`, y la abre en la ventana. Hay dos ejemplos en `data/teoria/`:
+
+```bash
+python scripts/compare_theory.py --statistics fermions --N 20 --q-max 30 --observable energy --theory data/teoria/ejemplo_fermiones_N20_energia.csv
+```
+
+```bash
+python scripts/compare_theory.py --statistics bosons --N 20 --q-max 15 --observable occupation --T 1 --theory data/teoria/ejemplo_bosones_N20_ocupacion_T1.csv
+```
 
 ### Tabla figura → script
 
-Todas las figuras se guardan en `figures/` en PDF (para el reporte) y en PNG (para las
-diapositivas). Para regenerar una sola desde los datos crudos:
-`python scripts/plot_results.py --only <nombre>`.
+Todas las figuras se guardan en `fig/` en PNG, numeradas en orden de lectura. Al terminar,
+`plot_results.py` abre una ventana para verlas una por una (← / → o los botones; cierre la ventana
+para salir); `python scripts/view_figures.py` la abre de nuevo sin regenerarlas.
 
-| Figura / tabla | Contenido | Datos crudos generados por | Datos en `data/raw/` |
-|---|---|---|---|
-| `fig_validation` | (a) N = 1 vs $3/(e^\beta-1)$, dos núcleos; (b) N = 3 vs enumeración; (c) discrepancias en σ | `scripts/run_validation.py` | `validation.npz`, `validation_table.csv` |
-| `fig_equilibration` | E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
-| `fig_autocorrelation` | C(t), τ_int y método de bloques | `scripts/run_equilibration.py` | `equilibration.npz` |
-| `fig_qmax_convergence` | Error de truncamiento vs error estadístico en función de $q_{max}$ | `scripts/run_sweeps.py` (parte A) | `qmax_convergence.npz` |
-| `fig_energy_vs_T` | ⟨E⟩/N vs T para BE y FD, N = 10–56, y referencia clásica | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
-| `fig_condensate_fraction` | $f_0$ vs $T/T_c$ y límite termodinámico | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
-| `fig_occupations` | ⟨n(ε)⟩: simulación vs canónico exacto vs BE/FD gran canónico | `scripts/run_sweeps.py` (parte B) | `sweep/*_N35_*.npz` |
-| `fig_ensemble_comparison` | Canónico − gran canónico y exponente de escalamiento en N | `scripts/run_sweeps.py` (partes B y C) | `sweep_summary.csv`, `ensemble_scaling.npz` |
-| `fig_z_scores` | Distribución de discrepancias de todo el barrido vs semi-normal | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
-| `fig_experimental_comparison` | Simulación y límite termodinámico vs experimentos: ⁸⁷Rb (Ensher 1996) y ⁴⁰K (DeMarco y Jin 1999) | `scripts/compare_experiments.py` | `experimental_comparison.npz/.csv` y `data/external/*.csv` |
-| `animation_equilibration.gif` | Relajación al equilibrio (presentación) | `scripts/make_animation.py` | `animation.npz` |
-| `tabla_validacion.tex` | Tabla de validación para LaTeX | `scripts/run_validation.py` | `validation_table.csv` |
-| `tabla_resultados.csv/.tex` | Parámetros calculados por corrida | `scripts/run_sweeps.py` | `sweep_summary.csv` |
+Para regenerar una sola desde los datos crudos:
+`python scripts/plot_results.py --only <nombre interno>` (por ejemplo `fig_validation`; añada
+`--no-show` para no abrir la ventana).
+
+| Archivo | Nombre interno (`--only`) | Contenido | Datos crudos generados por | Datos en `data/raw/` |
+|---|---|---|---|---|
+| `fig/01_validacion_contra_resultados_exactos.png` | `fig_validation` | (a) N = 1 vs $3/(e^\beta-1)$, dos núcleos; (b) N = 3 vs enumeración; (c) discrepancias en σ | `scripts/run_validation.py` | `validation.npz`, `validation_table.csv` |
+| `fig/02_equilibracion_desde_dos_estados_iniciales.png` | `fig_equilibration` | E/N desde dos condiciones iniciales, cruce de cadenas y $n_{burn}$ | `scripts/run_equilibration.py` | `equilibration.npz` |
+| `fig/03_autocorrelacion_de_la_energia.png` | `fig_autocorrelation` | C(t) y τ_int; cuánto subestima el error ingenuo | `scripts/run_equilibration.py` | `equilibration.npz` |
+| `fig/04_convergencia_en_el_corte_energetico_qmax.png` | `fig_qmax_convergence` | Error de truncamiento vs error estadístico en función de $q_{max}$ | `scripts/run_sweeps.py` (parte A) | `qmax_convergence.npz` |
+| `fig/05_energia_por_particula_vs_temperatura.png` | `fig_energy_vs_T` | ⟨E⟩/N vs T para BE y FD, N = 10–56, y referencia clásica | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
+| `fig/06_fraccion_de_condensado_bosones_vs_T.png` | `fig_condensate_fraction` | $f_0$ vs $T/T_c$ y límite termodinámico | `scripts/run_sweeps.py` (parte B) | `sweep/`, `sweep_summary.csv` |
+| `fig/07_ocupaciones_bosones_vs_fermiones_N45.png` | `fig_occupations` | ⟨n(ε)⟩ con N = 45: simulación (puntos) vs canónico exacto vs BE/FD gran canónico | `scripts/run_sweeps.py` (parte C) | `occupations.npz` |
+| `fig/08_energia_canonico_vs_gran_canonico_BE_FD.png` | `fig_ensemble_comparison` | Diferencia relativa de energía canónico − gran canónico, BE y FD | `scripts/run_sweeps.py` (parte B) | `sweep_summary.csv` |
+| `fig/09_animacion_relajacion_al_equilibrio_N56.gif` | — | Relajación al equilibrio (N = 56): ~8 s de relajación hasta n_burn y los últimos ~4 s en equilibrio, con el promedio acumulado sobre el exacto | `scripts/make_animation.py` | `animation.npz` |
+| `fig/comparaciones/*.png` | — | Teoría del usuario vs simulación | `scripts/compare_theory.py` | `comparaciones/*.csv` |
+| `data/tablas/tabla_validacion.tex` | — | Tabla de validación (LaTeX) | `scripts/run_validation.py` | `validation_table.csv` |
+| `data/tablas/tabla_resultados.csv/.tex` | — | Parámetros calculados por corrida | `scripts/run_sweeps.py` | `sweep_summary.csv` |
 
 Las curvas exactas densas de las figuras se guardan en caché en `data/raw/exact_curves.npz`
 y se recalculan solas si faltan.
@@ -90,36 +129,38 @@ y se recalculan solas si faltan.
 ## Estructura
 
 ```
-├── README.md, requirements.txt, Makefile, pytest.ini, .python-version
+├── README.md, requirements.txt, pytest.ini, .python-version
 ├── data/raw/           Datos crudos (.npz/.csv) con metadatos: semilla, parámetros, versiones, commit
-├── data/external/      Datos experimentales digitalizados de artículos (con fuente y README)
-├── figures/            Figuras finales (PDF + PNG), tablas y animación
+├── data/teoria/        Ejemplos de datos teóricos para comparar (CSV de dos columnas)
+├── data/tablas/        Tablas de resultados (CSV y LaTeX)
+├── fig/                Figuras PNG numeradas (01_ … 08_), animación GIF (09_) y comparaciones/
 ├── docs/               fundamentos.md (teoría y justificación), revision_rubrica.md
-├── reporte/            Reporte escrito en LaTeX (reporte.tex → reporte.pdf, 5 páginas + apéndices)
-├── presentacion/       Diapositivas beamer (presentacion.tex → presentacion.pdf, 14 + 4 de respaldo)
 ├── src/
-│   ├── model.py        Catálogo de estados 3D, Hamiltoniano, unidades SI↔reducidas, inicialización
-│   ├── metropolis.py   Núcleos MCMC (Metropolis simétrico y Metropolis–Hastings) con numba
-│   ├── analytics.py    Exactos: N = 1, enumeración, función generatriz canónica, gran canónico, T_c, ε_F
-│   ├── stats.py        τ_int (Sokal / primer cero), método de bloques, discrepancia z, equilibración
-│   ├── observables.py  E/N, f_0 = ⟨n_0⟩/N, ⟨n(ε)⟩ con incertidumbre y comparación con referencias
-│   ├── datastore.py    Guardado/lectura de datos crudos con metadatos; tablas CSV
-│   ├── plotting.py     Todas las figuras del reporte
-│   └── config.py       Parámetros globales: N, malla de T, pasos, semillas (BASE_SEED)
+│   ├── model.py          Catálogo de estados 3D, Hamiltoniano, unidades SI↔reducidas, inicialización
+│   ├── metropolis.py     Núcleos MCMC (Metropolis simétrico y Metropolis–Hastings) con numba
+│   ├── analytics.py      Exactos: N = 1, enumeración, función generatriz canónica, gran canónico, T_c, ε_F
+│   ├── stats.py          τ_int (Sokal / primer cero), error corregido, discrepancia z, equilibración
+│   ├── observables.py    E/N, f_0 = ⟨n_0⟩/N, ⟨n(ε)⟩ con incertidumbre y comparación con referencias
+│   ├── theory_compare.py Comparación de la simulación con datos teóricos del usuario
+│   ├── datastore.py      Guardado/lectura de datos crudos con metadatos; tablas CSV
+│   ├── plotting.py       Todas las figuras (PNG en fig/ con nombres descriptivos)
+│   ├── viewer.py         Ventana para ver las figuras una por una (anterior / siguiente)
+│   └── config.py         Parámetros globales: N, malla de T, pasos, semillas (BASE_SEED)
 ├── scripts/
-│   ├── run_validation.py    Validación cuantitativa (A2)
-│   ├── run_equilibration.py Termalización desde 2 estados iniciales y autocorrelación (A3)
-│   ├── run_sweeps.py        Barridos en q_max, T y N; escalamiento canónico vs gran canónico
-│   ├── plot_results.py      Lee data/raw/ y regenera todas las figuras y tablas
-│   ├── make_animation.py    GIF de la relajación al equilibrio
-│   ├── compare_experiments.py Comparación con datos experimentales (equilibrio, variables escaladas)
-│   ├── digitize_external.py Digitalización de figuras publicadas (requiere Poppler y los PDF)
-│   ├── interactive_cli.py   Interfaz de usuario en línea de comandos
-│   └── run_all.py           Función integradora (equivalente a `make all`)
+│   ├── run.py               Menú principal: elige qué ejecutar
+│   ├── interactive_cli.py   Simulación individual en línea de comandos
+│   ├── compare_theory.py    Teoría del usuario vs simulación con q_max a elección
+│   ├── run_validation.py    Validación contra resultados exactos
+│   ├── run_equilibration.py Termalización desde 2 estados iniciales y autocorrelación
+│   ├── run_sweeps.py        Barridos en q_max, T y N; ocupaciones con N = 45
+│   ├── plot_results.py      Lee data/raw/, regenera figuras (fig/) y tablas (data/tablas/) y abre el visor
+│   ├── view_figures.py      Abre la ventana con las figuras de fig/ sin regenerarlas
+│   └── make_animation.py    GIF de la relajación al equilibrio (N = 56)
 └── tests/
     ├── test_validation.py   Prueba automatizada del caso de validación (N = 1 y N = 2, seed = 42)
     └── test_core.py         Catálogo, exactos vs enumeración, conservación de N, Pauli,
-                             distribución estacionaria por microestado, τ_int de un AR(1)
+                             distribución estacionaria por microestado, τ_int de un AR(1),
+                             comparación con teoría del usuario
 ```
 
 ### Módulos (resumen de funciones)
@@ -137,9 +178,10 @@ y se recalculan solas si faltan.
   `exact_canonical` (cualquier N, funciones generatrices), `grand_canonical_observables` (μ fijado por N),
   `choose_q_max` (corte con truncamiento < 10⁻⁴T), `bec_critical_temperature` y `fermi_energy`.
 - **`stats`**: `integrated_autocorrelation_time`, `statistical_uncertainty`
-  ($\sigma_{\bar A}=\sqrt{2\tau_{int}\sigma_A^2/N}$), `blocking_error`, `blocking_analysis`,
-  `discrepancy_in_sigmas` y `estimate_burn_in`.
+  ($\sigma_{\bar A}=\sqrt{2\tau_{int}\sigma_A^2/N}$), `discrepancy_in_sigmas` y `estimate_burn_in`.
 - **`observables`**: `compute_observables(E_trace, level_trace, N)`, `compare_with_reference`.
+- **`theory_compare`**: `compare_with_theory(statistics, N, q_max, observable, theory_x, theory_y, T, ...)`,
+  `read_theory_file(path)` y `parse_pairs(texto)`.
 
 ## Reproducibilidad y semillas
 
@@ -173,7 +215,7 @@ python scripts/interactive_cli.py --statistics fermions --N 20 --T 1.5 --seed 42
 
 Corrida completa con las semillas de `src/config.py`. Las incertidumbres son 1σ, corregidas por autocorrelación.
 
-**Validación (A2).**
+**Validación.**
 - 68 comparaciones contra resultados exactos: N = 1 contra la fórmula analítica, N = 3 contra
   enumeración y los dos núcleos con N = 10. Discrepancia media z = 0.77, máxima 2.48, y 97 % con z < 2.
 - La función generatriz y la enumeración coinciden hasta 1.2 × 10⁻¹³.
@@ -184,57 +226,39 @@ Corrida completa con las semillas de `src/config.py`. Las incertidumbres son 1σ
   control. Los promedios coinciden con el exacto (z ≤ 1.1) y la dispersión entre semillas
   coincide con σ (cociente 0.86–1.23): los errores están bien calibrados.
 
-**Equilibración e incertidumbre (A3).**
+**Equilibración e incertidumbre.**
 - Las cadenas fría y caliente se cruzan a 6.8 × 10⁵ pasos (bosones, N = 35, T = 2) y a
   3.6 × 10⁴ pasos (fermiones, N = 35, T = 1). Es muy por debajo de la termalización descartada
   (2.4 × 10⁷ y 6 × 10⁶). En producción las dos cadenas coinciden (z = 0.47 y 0.18).
-- Para bosones, τ_int ≈ 12 mediciones: el error corregido es 5 veces el ingenuo, y el método de bloques lo confirma.
+- Para bosones, τ_int ≈ 12 mediciones: el error corregido es 5 veces el ingenuo.
+- **La termalización usada para la estadística es suficiente en todo el barrido.** Todas las corridas
+  descartan n_burn = 10 % de sus pasos (`BURN_FRACTION` en `src/config.py`, el mismo valor en todos los
+  scripts) y miden sólo después. `run_equilibration.py` lo comprueba en los 104 puntos (estadística, N, T):
+  las cadenas fría y caliente se cruzan antes de n_burn en todos, y en el peor caso (bosones, N = 56,
+  T = 5) al 47 % de n_burn. Resultado en `data/raw/burn_check.csv`.
 
 **Condensación de Bose–Einstein (tamaño finito).**
 - A T/T_c ≈ 0.49 se obtiene f₀ = 0.627 ± 0.002, 0.674 ± 0.003, 0.712 ± 0.003 y 0.735 ± 0.004
   para N = 10, 20, 35 y 56. Es muy por debajo del límite termodinámico 1 − (T/T_c)³ ≈ 0.88,
   pero se acerca a él al crecer N y sigue la corrección de tamaño finito
   1 − t³ − 3C t² N^{-1/3} (0.633, 0.690, 0.726, 0.750).
-- Con N finito el condensado aparece como un cruce gradual, no como una transición abrupta (`fig_condensate_fraction`).
+- Con N finito el condensado aparece como un cruce gradual, no como una transición abrupta (`06_fraccion_de_condensado_bosones_vs_T.png`).
 
 **Mar de Fermi.**
 - A T = 0.25: E/N = 1.5729 ± 0.0005, 2.3161 ± 0.0003, 3.0581 ± 0.0002 y 3.8010 ± 0.0002, frente
   a E₀/N = 1.5, 2.25, 3.0 y 3.75 del mar lleno (capas cerradas).
-- La ocupación forma un escalón en ε_F que se suaviza al subir T (`fig_occupations`). A T alta,
-  bosones y fermiones convergen a la referencia clásica (`fig_energy_vs_T`).
+- La ocupación forma un escalón en ε_F que se suaviza al subir T (`07_ocupaciones_bosones_vs_fermiones_N45.png`). A T alta,
+  bosones y fermiones convergen a la referencia clásica (`05_energia_por_particula_vs_temperatura.png`).
 
 **¿Cumple con Bose–Einstein / Fermi–Dirac? (comparación entre ensembles).**
-- La simulación reproduce la forma de BE y FD (`fig_occupations`), pero con N fijo hay
-  desviaciones medibles respecto al ensemble gran canónico:
-  - el condensado canónico es hasta 0.074 menor (N = 10, T/T_c ≈ 0.6);
-  - la energía de los bosones es hasta 16 % mayor;
-  - la de los fermiones es hasta 1.6 % menor.
-- Esas diferencias decaen aproximadamente como 1/N: N^{-0.86 ± 0.06} en bosones a T/T_c = 0.5
-  (el exacto con el mismo ajuste da −0.93) y N^{-1.13 ± 0.07} en fermiones a T/T_F = 0.25
-  (exacto −1.11). Las distribuciones FD y BE se recuperan en el límite N → ∞ (`fig_ensemble_comparison`).
-
-**Comparación con experimentos** (`fig_experimental_comparison`; datos digitalizados en
-[data/external/](data/external/README.md)). Sólo se comparan propiedades de equilibrio, en
-variables escaladas. Los pasos de Monte Carlo no son tiempo físico, así que la "evolución" no es comparable.
-- *Fermiones*, ⁴⁰K, N ≈ 7×10⁵ (DeMarco y Jin 1999):
-  - El exceso de energía δU/U_cl sigue la forma del gas de Fermi ideal.
-  - Con la escala nominal de T/T_F el ajuste es malo: χ² = 201 con 29 grados de libertad.
-  - Si se reescala T/T_F por s = 0.847 ± 0.009, el acuerdo es excelente (χ² = 30.2/28, p = 0.36).
-    Ese 15 % cabe en el 20 % de incertidumbre sistemática en T/T_F que declaran los autores.
-  - La simulación converge al mismo límite al crecer N: la desviación media baja de
-    +0.0086 (N = 10) a +0.0039 (N = 56).
-- *Bosones*, ⁸⁷Rb (Ensher et al. 1996):
-  - Por encima de T₀ la energía medida está mucho más cerca del gas de Bose ideal
-    (−0.060 ± 0.020 k_BT₀) que del clásico (−0.157). Esa diferencia equivale a ~4 % en la escala T/T₀,
-    comparable con la incertidumbre de T_c = 0.94(5) T₀.
-  - Por debajo de 0.9 T₀ el dato supera al ideal en +0.31 k_BT₀: es la energía de interacción
-    del condensado, que el modelo ideal no incluye. Es la principal limitación física del modelo.
-  - Con N pequeño la simulación también queda por encima del ideal a T baja, pero por otra
-    razón: la energía de punto cero es (3/4)ħω/k_BT₀ ∝ N^{-1/3}.
+- La simulación reproduce la forma de BE y FD (`07_ocupaciones_bosones_vs_fermiones_N45.png`), pero con N fijo
+  la energía difiere de la del ensemble gran canónico (`08_energia_canonico_vs_gran_canonico_BE_FD.png`):
+  - en bosones es hasta 16 % mayor (N = 10, cerca de T/T_c ≈ 0.5);
+  - en fermiones es hasta 1.6 % menor.
+- La diferencia disminuye al crecer N: FD y BE se recuperan en el límite N → ∞.
 
 ## Uso de herramientas de IA
 
 Parte del código y de la documentación se generó con ayuda de un asistente de IA (Claude).
 Todo el código se verificó con las pruebas automatizadas, con la comparación contra la
-solución exacta y con la revisión de las derivaciones en `docs/fundamentos.md`. El reporte
-debe incluir la declaración correspondiente (rúbrica §8).
+solución exacta y con la revisión de las derivaciones en `docs/fundamentos.md`.

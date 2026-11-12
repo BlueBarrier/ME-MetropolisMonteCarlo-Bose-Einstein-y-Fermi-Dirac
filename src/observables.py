@@ -5,8 +5,7 @@
 - Ocupación media por estado de cada nivel: ⟨n(ε)⟩ = ⟨N(ε)⟩ / g(ε), donde N(ε) es el
   número de partículas en los g(ε) estados degenerados del nivel ε.
 
-Cada valor va con su error estándar corregido por autocorrelación (τ_int) y con
-el error por bloques como comprobación cruzada.
+Cada valor va con su error estándar corregido por autocorrelación (τ_int).
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 
 from .model import level_degeneracy
-from .stats import blocking_analysis, discrepancy_in_sigmas, statistical_uncertainty
+from .stats import discrepancy_in_sigmas, statistical_uncertainty
 
 
 def compute_observables(E_trace: np.ndarray, level_trace: np.ndarray, N: int) -> dict:
@@ -29,11 +28,9 @@ def compute_observables(E_trace: np.ndarray, level_trace: np.ndarray, N: int) ->
     # ``resolution`` = salto mínimo de cada observable (ver stats.statistical_uncertainty).
     E_per_N = np.asarray(E_trace, dtype=float) / N
     e_mean, e_tau, e_err = statistical_uncertainty(E_per_N, resolution=1.0 / N)
-    e_block = blocking_analysis(E_per_N)["plateau_error"]
 
     n0 = np.asarray(level_trace[:, 0], dtype=float)
     f0_mean, f0_tau, f0_err = statistical_uncertainty(n0 / N, resolution=1.0 / N)
-    f0_block = blocking_analysis(n0 / N)["plateau_error"]
 
     q_max = level_trace.shape[1] - 1
     g = level_degeneracy(np.arange(q_max + 1))
@@ -48,11 +45,9 @@ def compute_observables(E_trace: np.ndarray, level_trace: np.ndarray, N: int) ->
         "n_samples": int(E_per_N.size),
         "energy_per_particle": e_mean,
         "energy_per_particle_err": e_err,
-        "energy_per_particle_err_blocking": e_block,
         "tau_int_energy": e_tau,
         "condensate_fraction": f0_mean,
         "condensate_fraction_err": f0_err,
-        "condensate_fraction_err_blocking": f0_block,
         "tau_int_n0": f0_tau,
         "levels": np.arange(q_max + 1),
         "degeneracy": g,

@@ -20,7 +20,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"
-FIG_DIR = ROOT / "figures"
+FIG_DIR = ROOT / "fig"
 
 
 def environment_metadata() -> dict:

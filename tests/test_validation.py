@@ -1,4 +1,4 @@
-"""Prueba automatizada del caso de validación (rúbrica A4).
+"""Prueba automatizada del caso de validación.
 
 Simulaciones cortas con semilla fija (seed = 42) que se comparan con resultados exactos:
   - N = 1 contra ⟨E⟩ = 3/(e^β − 1) (trampa infinita, corte con truncamiento < 10⁻⁴ T),
