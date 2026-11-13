@@ -251,4 +251,4 @@ Corrida completa con las semillas de `src/config.py`. Las incertidumbres son 1σ
 
 Parte del código y de la documentación se generó con ayuda de un asistente de IA (Claude).
 Todo el código se verificó con las pruebas automatizadas, con la comparación contra la
-solución exacta y con la revisión de las derivaciones en `docs/fundamentos.md`.
+solución exacta..
